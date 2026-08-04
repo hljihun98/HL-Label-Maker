@@ -1,0 +1,13 @@
+# 저장소에는 LF 로 정규화하고, 체크아웃 시에는 각 OS 관례를 따른다
+* text=auto
+
+*.html  text
+*.css   text
+*.js    text
+*.md    text
+*.svg   text
+*.json  text
+
+*.png   binary
+*.jpg   binary
+*.ico   binary

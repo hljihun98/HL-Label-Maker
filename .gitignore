@@ -1,0 +1,19 @@
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*~
+
+# 임시 파일
+*.tmp
+*.bak
+~$*

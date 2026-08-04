@@ -1,0 +1,204 @@
+:root{
+  --ink:#111318; --line:#d3d8de; --bg:#f4f6f8; --panel:#fff;
+  --brand:#00AEEF; --brand-dk:#0088bb; --muted:#6b7480;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","맑은 고딕",sans-serif;}
+/* ---------- 화면 UI ---------- */
+.app{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+.side{background:var(--panel);border-right:1px solid var(--line);padding:18px 16px 60px;overflow:auto}
+.main{padding:18px 20px 60px}
+.brand{margin:0 0 10px}
+.bm{height:19px;width:143.7px;display:block;color:var(--ink)}
+h1{font-size:14px;letter-spacing:-.2px;margin:0 0 2px;color:var(--muted);font-weight:700}
+.sub{font-size:11.5px;color:var(--muted);margin:0 0 16px}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px 12px;margin:0 0 12px}
+legend{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--brand-dk);padding:0 4px;text-transform:uppercase}
+label{display:block;font-size:10.5px;color:var(--muted);margin:8px 0 3px;font-weight:600}
+input,select,textarea,button{font:inherit;font-size:12.5px}
+input,select,textarea{width:100%;padding:6px 7px;border:1px solid var(--line);border-radius:4px;background:#fff}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand);outline-offset:-1px;border-color:var(--brand)}
+.row{display:grid;gap:8px}
+.r2{grid-template-columns:1fr 1fr}.r3{grid-template-columns:1fr 1fr 1fr}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:5px;padding:7px 11px;font-weight:600}
+button:hover{border-color:var(--brand);color:var(--brand-dk)}
+button.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+button.pri:hover{background:var(--brand-dk);color:#fff}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chk{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink);font-weight:600;margin-top:8px}
+.chk input{width:auto}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.bar .sp{flex:1}
+.tag{font-size:11px;color:var(--muted)}
+.list{margin-top:10px;font-size:11.5px}
+.list .it{display:flex;gap:8px;align-items:center;padding:5px 6px;border:1px solid var(--line);border-radius:4px;margin-bottom:4px;background:#fff}
+.list .it b{font-family:ui-monospace,Consolas,monospace}
+.list .it span{flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list .it button{padding:1px 6px;font-size:11px;line-height:1.4}
+.empty{color:var(--muted);font-size:11.5px;padding:10px;border:1px dashed var(--line);border-radius:5px;text-align:center}
+.warnbar{background:#fff6e0;border:1px solid #f0d089;border-radius:6px;padding:9px 12px;
+  font-size:11.5px;line-height:1.6;color:#6b4c00;margin-bottom:12px}
+.preview{background:#e7ebef;border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.pw{background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.13)}
+textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:11.5px}
+.hint{font-size:10.5px;color:var(--muted);line-height:1.5;margin:6px 0 0}
+.hint code{background:#eef1f4;padding:1px 4px;border-radius:3px;font-size:10px}
+.hint.warn{color:#a86a00;font-weight:700}
+.hint:empty{margin:0}
+.r4{grid-template-columns:repeat(4,1fr)}
+.ilbl{display:block;text-align:center;font-size:10px;color:var(--muted);margin-top:2px}
+.adv-switch{margin:18px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer;margin:0}
+.sw input{position:absolute;opacity:0;width:0;height:0}
+.sw .track{flex:0 0 auto;width:40px;height:22px;border-radius:99px;background:#cdd4db;position:relative;transition:background .16s}
+.sw .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .16s}
+.sw input:checked+.track{background:var(--brand)}
+.sw input:checked+.track .knob{transform:translateX(18px)}
+.sw input:focus-visible+.track{outline:2px solid var(--brand);outline-offset:2px}
+.sw-t{display:flex;flex-direction:column;line-height:1.35}
+.sw-t b{font-size:12.5px}
+.sw-t span{font-size:10.5px;color:var(--muted)}
+.adv-box{display:none}
+.adv-box.on{display:block}
+.adv-box fieldset{background:#fbfcfd}
+
+/* ---------- 라벨 (흑백 전용: 검정/흰색만 사용, 회색·하프톤 없음) ---------- */
+.label{
+  position:relative;width:var(--lw,100mm);height:var(--lh,60mm);background:#fff;color:#000;overflow:hidden;
+  padding:var(--pt,3mm) var(--pr,3mm) var(--pb,3mm) var(--pl,3mm);display:flex;flex-direction:column;
+  transform:translate(var(--dx,0mm),var(--dy,0mm)) scale(var(--sc,1));transform-origin:0 0;
+  font-family:"Malgun Gothic","맑은 고딕",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.frame{position:absolute;top:0;left:0;right:0;bottom:0;border:.25mm solid #000;pointer-events:none}
+.label *{box-sizing:border-box}
+.mono{font-family:Consolas,"D2Coding",ui-monospace,monospace}
+.cap{font-size:calc(1.6mm * var(--fs,1));font-weight:700;letter-spacing:.04em;line-height:1;display:block;margin-bottom:.5mm;white-space:nowrap;overflow:hidden}
+.cap i{font-style:normal;font-weight:600;letter-spacing:.02em}
+
+/* 헤더 */
+.lb-head{height:9mm;display:flex;align-items:flex-end;gap:2mm;flex:0 0 auto}
+.lb-logo{height:5.6mm;display:flex;align-items:flex-end}
+.lb-logo img{height:5.6mm;width:42.4mm;display:block;color:#000}
+.lb-head .gap{flex:1}
+.loc{width:34mm;height:9mm;background:#000;color:#fff;display:flex;flex-direction:column;justify-content:center;
+     padding:0 1.6mm;overflow:hidden}
+.loc .cap{color:#fff;opacity:1;margin-bottom:.2mm}
+.loc .v{font-size:calc(5.2mm * var(--fs,1));font-weight:800;line-height:1;letter-spacing:.02em;white-space:nowrap}
+.loc.blank{background:#fff;color:#000;border:calc(var(--bw,.35mm) + .05mm) solid #000}
+.loc.blank .cap{color:#000}
+
+/* 본문 */
+.lb-body{flex:1 1 auto;min-height:0;display:flex;border:var(--bw,.35mm) solid #000;border-bottom:0}
+.fields{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.fr{display:flex;border-bottom:var(--bw,.35mm) solid #000}
+.fr:last-child{border-bottom:0}
+/* min-width:0 이 없으면 nowrap 품번이 자기 폭만큼 칸을 밀어내 REV 칸이 라벨 밖으로 나간다 */
+.fc{padding:.8mm 1.4mm;border-right:var(--bw,.35mm) solid #000;overflow:hidden;min-width:0;
+    display:flex;flex-direction:column;justify-content:center}
+.fc:last-child{border-right:0}
+.v-xl{font-size:calc(5.4mm * var(--fs,1));font-weight:800;line-height:1;letter-spacing:.01em;white-space:nowrap}
+.v-lg{font-size:calc(4mm * var(--fs,1));font-weight:800;line-height:1.05}
+.v-sm{font-size:calc(2.5mm * var(--fs,1));font-weight:600;line-height:1.15}
+/* 품명 — fitWrap 이 두 줄로 나눈 결과를 실제로 두 줄로 인쇄한다.
+   규칙이 없으면 span 이 inline 이라 두 줄이 한 줄로 이어붙어 잘린다.
+   line-height 1.12 는 lineCap() 이 칸 높이를 계산할 때 쓰는 값과 같아야 한다. */
+.v-ml{display:block}
+.v-ml .ml{display:block;line-height:1.12;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-pn,.r-nm,.r-mat-meta{flex:0 0 auto}
+/* 칸 폭은 label-renderers.js 의 레이아웃 상수를 applyStyles() 가 변수로 넘겨준다 —
+   JS 와 CSS 에 같은 숫자를 두 번 적어 어긋나는 일을 막는다. */
+.w-pn{flex:1}
+.w-rev{width:var(--rev-w,10mm);flex:0 0 var(--rev-w,10mm);text-align:center;align-items:center}
+.w-mat-meta{flex:1}
+.nowrap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 여러 줄이 들어가는 칸은 위쪽 정렬 — 중앙 정렬이면 넘칠 때 캡션이 먼저 잘린다 */
+.r-nm .fc,.r-ap .fc{justify-content:flex-start}
+
+/* 푸터 — 높이는 인라인 style(=JS 상수)이 정한다.
+   flex-basis 를 mm 로 못 박으면 인라인 height 를 덮어써서 QR 이 계산보다 작게 인쇄된다. */
+.lb-foot{flex:0 0 auto;display:flex;border:var(--bw,.35mm) solid #000}
+/* 1D 바코드는 QR 오른쪽의 남은 폭을 사용한다. 막대는 세로 비율을 자유롭게 늘려도 정보가 변하지 않으므로
+   막대(SVG)와 사람이 읽는 문자(HTML)를 분리해 각각 최적 크기로 인쇄한다. */
+.bcbox{flex:1;min-width:0;padding:.5mm 1.2mm;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.bcbars{width:100%;height:6.2mm;flex:0 0 6.2mm}
+.bcbars svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
+.bctext{font-size:calc(2.4mm * var(--fs,1));font-weight:700;text-align:center;letter-spacing:.08em;line-height:1.05;margin-top:.5mm}
+
+/* 자재류 라벨 — 본문은 시안형 정보 배치, QR과 1D 바코드는 하단에 나란히 둔다. */
+.matmode .lb-logo img{height:5.6mm;width:auto}
+/* QR 칸에는 여백을 두지 않는다 — quiet zone 은 QR 자체가 모듈 수로 갖고 있고,
+   여기에 패딩을 더하면 셀만 작아져 인식이 나빠진다. */
+.mat-foot-qr{width:var(--qr-w,12.5mm);flex:0 0 var(--qr-w,12.5mm);padding:0;
+  border-right:var(--bw,.35mm) solid #000;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mat-foot-qr svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
+.matmode .bcbox{padding:.4mm 1.2mm}
+.matmode .bcbars{height:5.2mm;flex:0 0 5.2mm}
+.matmode .bctext{font-size:calc(2mm * var(--fs,1));margin-top:.3mm}
+
+/* 볼트류 라벨 */
+.label.boltmode .lb-head{align-items:center}
+.boltmode .lb-logo{height:5.2mm}
+.boltmode .lb-logo img{height:5.2mm;width:auto}
+.r-hero,.r-shape,.r-ap{flex:0 0 auto}
+.r-ap{min-height:0}
+.r-ap .fc{padding-top:.35mm;padding-bottom:.35mm}
+.r-ap .cap{font-size:calc(1.4mm * var(--fs,1));margin-bottom:.25mm}
+.w-spec{flex:1}
+.w-grade{width:var(--grade-w,10mm);flex:0 0 var(--grade-w,10mm);text-align:center;align-items:center}
+.w-top{width:var(--top-w,15mm);flex:0 0 var(--top-w,15mm)}
+.w-side{width:var(--side-w,57.8mm);flex:0 0 var(--side-w,57.8mm)}
+.w-hm{flex:1}                       /* 남는 폭을 쓴다 — 고정폭이면 합이 넘쳐 오른쪽이 잘린다 */
+.w-ap{flex:1}
+.bl-spec{font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.bl-grade{font-weight:800;line-height:1}
+/* 머리 위에서 본 도면 — 칸 높이에 맞춰 정사각형으로 그린다 */
+.dwg{flex:1;min-height:0;display:flex;align-items:center;overflow:hidden}
+.dwg svg{display:block;height:100%}
+.dwg.top{justify-content:center}
+.dwg.top svg{width:auto;max-width:100%}
+/* 측면 반단면도 — 크기를 mm 로 못 박아 1:1 을 지키므로 칸 안에 직접 놓는다.
+   중간에 flex 래퍼를 한 겹 더 두면 높이 계산이 어긋나 도면이 칸 밖으로 밀려 안 보인다.
+   중심선이 도면의 아래 경계이므로 칸 아래(justify-content:flex-end)를 기준선으로 정렬한다. */
+.w-side{justify-content:flex-end;align-items:flex-start}
+.bolt-side-art{flex:0 0 auto;display:block;overflow:hidden}
+.bolt-side-art svg{display:block;width:100%;height:100%}
+.w-hm{gap:.2mm;justify-content:center}
+.hm{font-size:calc(2mm * var(--fs,1));font-weight:600;line-height:1.28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm b{font-weight:800}
+/* 적용 정보 — 줄별 개수를 오른쪽 정렬 */
+.v-ap{display:block;min-width:0}
+.v-ap .ml{display:flex;justify-content:space-between;align-items:baseline;gap:1mm;line-height:1.15;font-weight:600}
+.v-ap .mt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v-ap .mq{flex:0 0 auto;font-weight:800}
+/* 볼트 QR — 1D 바코드 왼쪽에 배치해 측면 도면 칸을 13mm 넓힌다. 칸 안 여백은 두지 않는다. */
+.bolt-foot-qr{width:var(--qr-w,10.2mm);flex:0 0 var(--qr-w,10.2mm);padding:0;
+  border-right:var(--bw,.35mm) solid #000;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.bolt-foot-qr svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
+/* 볼트 라벨 푸터 — QR + 1D 바코드 */
+.boltmode .bcbox{padding:.4mm 1.2mm}
+.boltmode .bcbars{height:5.2mm;flex:0 0 5.2mm}
+.boltmode .bctext{font-size:calc(2mm * var(--fs,1));margin-top:.3mm}
+
+/* 로케이션 라벨 */
+.lm-top{display:flex;align-items:center;gap:3mm;flex:1}
+.lm-qr{width:34mm;height:34mm;flex:0 0 34mm;border:var(--bw,.35mm) solid #000;padding:.2mm}
+.lm-qr svg{width:100%;height:100%;shape-rendering:crispEdges;display:block}
+.lm-txt{flex:1;min-width:0}
+.lm-txt .v{font-size:calc(16mm * var(--fs,1));font-weight:800;line-height:.95;letter-spacing:-.02em}
+.lm-txt .d{font-size:calc(3.2mm * var(--fs,1));font-weight:700;margin-top:1.5mm}
+.lm-foot{height:7mm;display:flex;align-items:flex-end;justify-content:space-between}
+.lm-logo img{height:5mm;width:37.8mm;display:block;color:#000}
+.lm-foot .t{font-size:calc(2.4mm * var(--fs,1));font-weight:700;letter-spacing:.06em}
+
+/* 인쇄 */
+@media print{
+  .side,.bar,.no-print{display:none!important}
+  html,body{background:#fff}
+  .app{display:block}.main{padding:0}
+  .preview{background:none;border:0;padding:0;display:block;gap:0}
+  .pw{box-shadow:none}
+  .label{page-break-inside:avoid;break-inside:avoid}
+}

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HL Robotics 자재 라벨 100×60</title>
+  <link rel="stylesheet" href="assets/css/label-maker.css">
+  <script src="assets/js/vendor/qrcode.min.js" defer></script>
+  <script src="assets/js/barcode.js" defer></script>
+  <script src="assets/js/core.js" defer></script>
+  <script src="assets/js/label-renderers.js" defer></script>
+  <script src="assets/js/app.js" defer></script>
+</head>
+<body>
+<div class="app">
+<div class="side">
+  <div class="brand"><img class="bm" src="assets/images/hl-robotics-logo.svg" alt="HL Robotics"></div>
+  <h1>자재 라벨 생성기</h1>
+  <p class="sub">100 × 60 mm 유포지 · 흑백 1색 인쇄</p>
+
+  <fieldset>
+    <legend>라벨 종류</legend>
+    <select id="mode" onchange="switchMode()">
+      <option value="mat">자재 라벨 (파트박스용)</option>
+      <option value="bolt">볼트류 라벨 (파스너 박스용)</option>
+      <option value="loc">로케이션 라벨 (랙 칸 표시용)</option>
+    </select>
+  </fieldset>
+
+  <div id="matForm">
+  <fieldset>
+    <legend>품목 정보</legend>
+    <div class="row r2">
+      <div><label>품번 *</label><input id="pn" value="RP-303-013"></div>
+      <div><label>Rev</label><input id="rev" value="D"></div>
+    </div>
+    <label>품명 (영문/대문자 권장)</label><input id="nm" value="MOUNTING BRACKET">
+    <div class="row r2">
+      <div><label>수량</label><input id="qty" value="100"></div>
+      <div><label>단위</label>
+        <select id="unit"><option>EA</option><option>SET</option><option>BOX</option><option>kg</option><option>m</option></select></div>
+    </div>
+    <div class="row r2">
+      <div><label>기종 / PJT</label><input id="pj" value="PARKIE"></div>
+      <div><label>협력사</label><input id="vd" value=""></div>
+    </div>
+    <div class="row r2">
+      <div><label>입고일</label><input id="dt" type="date" onchange="syncSeq()"></div>
+      <div><label>로케이션 (비우면 수기칸)</label><input id="loc" value="A-03-2"></div>
+    </div>
+    <label>발행 라벨 수 (박스 개수)</label><input id="bn" type="number" min="1" max="400" step="1" value="1">
+    <p class="hint">규격과 수량은 라벨에 인쇄하지 않습니다 — 규격은 자재관리 시스템에서 확인하고,
+      수량은 QR(URL·텍스트형)에만 담아 입출고 폼의 기본값으로 씁니다.</p>
+  </fieldset>
+  </div>
+
+  <div id="boltForm" style="display:none">
+  <fieldset>
+    <legend>볼트 규격</legend>
+    <div class="row r3">
+      <div><label>머리 형상</label>
+        <select id="bHead" onchange="boltAuto()">
+          <option value="SOCKET">SOCKET 육각소켓</option>
+          <option value="HEX">HEX 헥사 볼트</option>
+          <option value="PHILLIPS">PHILLIPS 십자</option>
+          <option value="FLANGE">FLANGE 플랜지</option>
+          <option value="BUTTON">BUTTON 버튼</option>
+          <option value="TORX">TORX 별</option>
+          <option value="SET">SET 무두</option>
+        </select></div>
+      <div><label>직경 (M)</label><input id="bDia" value="M8" oninput="boltAuto()"></div>
+      <div><label>길이 (L, mm)</label><input id="bLen" type="number" min="0.1" step="0.1" value="30" oninput="updateBoltCode()"></div>
+    </div>
+    <div class="row r2">
+      <div><label>강도 구분</label>
+        <select id="bGrade" onchange="updateBoltCode()">
+          <option value="12.9">12.9</option><option value="10.9">10.9</option>
+          <option value="8.8">8.8</option><option value="A2-70">A2-70 (STS)</option>
+        </select></div>
+      <div><label>재질</label><input id="bMat" value="SCM435"></div>
+    </div>
+    <label>머리 치수 <span class="tag">(1:1 도면용 · 규격에서 자동, 수정 가능)</span></label>
+    <div class="row r2">
+      <div><input id="bDk" type="number" step="0.1"><span class="ilbl">머리 지름 dk</span></div>
+      <div><input id="bK" type="number" step="0.1"><span class="ilbl">머리 높이 k</span></div>
+    </div>
+    <p class="hint" id="dimNote"></p>
+    <p class="hint">측면 도면은 <b>배율 100% 인쇄에서 항상 1:1</b>입니다(축소하지 않습니다).
+      실물 볼트의 중심을 도면 아래 <b>중심선</b>에 맞춰 올리면 길이와 머리 두께를 그대로 대조할 수 있습니다.
+      칸보다 큰 규격은 머리 위쪽이 잘리거나 길이 끝에 축약 기호(지그재그)가 그려집니다.</p>
+    <label>사내 코드 <span class="tag">(규격에서 자동 생성 · 수정 가능)</span></label>
+    <input id="bCode" value="">
+  </fieldset>
+
+  <fieldset>
+    <legend>적용 정보</legend>
+    <div class="row r2">
+      <div><label>적용 제품 <span class="tag">(여러 개는 / 구분)</span></label><input id="bProd" value="DD90 구동모듈 · PLATE / DD90 구동모듈 · TRACTION"></div>
+      <div><label>대분류 <span class="tag">(적용 제품에 포함시켰으면 비움)</span></label><input id="bCat" value=""></div>
+    </div>
+    <label>적용 위치 <span class="tag">(여러 곳이면 줄바꿈 또는 / 로 구분)</span></label>
+    <textarea id="bPos" style="min-height:46px">BLOCK TILTING BASE : 24 / COVER, TOP : 10</textarea>
+    <p class="hint">쉼표는 이름의 일부로 둡니다 — <code>BRACKET, MOTOR</code>는 한 부품명(BOM 표기),
+      <code>BRACKET / MOTOR</code>는 두 위치로 처리됩니다. 최대 3줄까지 인쇄됩니다.<br>
+      위치별 개수는 <code>BLOCK TILTING BASE : 24</code> 처럼 콜론 뒤에 적으면 오른쪽에 정렬돼 인쇄되고 합계가 캡션에 표시됩니다.</p>
+    <div class="row r3">
+      <div><label>ASSY당 개수</label><input id="bPerAssy" type="number" min="0" step="1" value="4" oninput="updateBoltQuantity()"></div>
+      <div><label>ASSY 개수</label><input id="bAssyN" type="number" min="0" step="1" value="4" oninput="updateBoltQuantity()"></div>
+      <div><label>로봇 1대당</label><input id="bPerBot" type="number" min="0" step="1" value="16"></div>
+    </div>
+    <p class="hint">1대당 개수 = ASSY당 개수 × ASSY 개수로 자동 계산됩니다. 다르면 직접 고쳐 쓰세요.</p>
+    <label>발행 장수</label><input id="bN" type="number" min="1" max="400" step="1" value="1">
+  </fieldset>
+  </div>
+
+  <div id="locForm" style="display:none">
+  <fieldset>
+    <legend>로케이션</legend>
+    <label>코드 (예: A-03-2)</label><input id="lcode" value="A-03-2">
+    <label>설명 (랙 / 단 / 칸)</label><input id="ldesc" value="A랙 · 3단 · 2번칸">
+    <label>일괄 생성 (한 줄에 하나: 코드,설명)</label>
+    <textarea id="lbulk" placeholder="A-01-1,A랙 · 1단 · 1번칸&#10;A-01-2,A랙 · 1단 · 2번칸"></textarea>
+  </fieldset>
+  </div>
+
+  <fieldset>
+    <legend>용지</legend>
+    <select id="paper" onchange="applyPaper()">
+      <option value="roll">라벨 프린터 – 100×60 낱장 연속</option>
+      <option value="a4">A4 시트 – 2열 × 4행</option>
+    </select>
+  </fieldset>
+
+  <div class="btns">
+    <button class="pri" onclick="addLabels()">목록에 추가</button>
+    <button onclick="renderAll()">미리보기 갱신</button>
+  </div>
+
+  <fieldset style="margin-top:14px">
+    <legend>일괄 등록 (CSV 붙여넣기)</legend>
+    <textarea id="csv" placeholder="품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수"></textarea>
+    <div class="chk" id="mergeWrap" style="display:none"><input type="checkbox" id="bMerge" checked>
+      <label for="bMerge" style="margin:0">동일 규격 합치기 (적용 위치를 한 라벨에 모으고 1대당 개수 합산)</label></div>
+    <div class="btns"><button onclick="importCsv()">CSV 추가</button></div>
+    <p class="hint" id="csvHint">순서: <code>품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수</code><br>
+      <b>규격</b> 열은 자리만 지켜주면 됩니다(라벨에 인쇄하지 않음).<br>
+      LOT-IMS <b>재고현황 CSV</b>는 헤더째 그대로 붙여넣으면 자동으로 매핑됩니다.</p>
+  </fieldset>
+
+  <!-- ================= 디테일 설정 ================= -->
+  <div class="adv-switch">
+    <label class="sw"><input type="checkbox" id="adv" onchange="toggleAdv()"><span class="track"><span class="knob"></span></span>
+      <span class="sw-t"><b>디테일 설정</b><span>인쇄가 잘리거나 위치가 안 맞을 때 켜세요</span></span></label>
+  </div>
+
+  <div id="advBox" class="adv-box">
+    <fieldset>
+      <legend>① 인쇄 정합 (잘림·밀림 보정)</legend>
+      <p class="hint" style="margin:2px 0 8px">순서: <b>정합 테스트 인쇄</b> → 잘린 쪽을 자로 실측 → 아래 값 입력 → 다시 테스트.</p>
+      <div class="btns" style="margin:0 0 10px"><button onclick="printCalib()">📐 정합 테스트 인쇄</button></div>
+      <label>프린터 프리셋</label>
+      <div class="btns" style="margin:0 0 10px">
+        <button onclick="applyPreset('label')">라벨 프린터</button>
+        <button class="pri" onclick="applyPreset('laser')">레이저 프린터</button>
+        <button onclick="resetCal()">전체 초기화</button>
+      </div>
+      <div class="row r2">
+        <div><label>라벨 실측 가로(mm)</label><input id="lw" type="number" min="20" max="300" step="0.5" value="100"></div>
+        <div><label>라벨 실측 세로(mm)</label><input id="lh" type="number" min="20" max="300" step="0.5" value="60"></div>
+      </div>
+      <label>내부 여백 (mm)</label>
+      <div class="row r4">
+        <div><input id="pt" type="number" min="0" max="50" step="0.5" value="3"><span class="ilbl">위</span></div>
+        <div><input id="pb" type="number" min="0" max="50" step="0.5" value="3"><span class="ilbl">아래</span></div>
+        <div><input id="pl" type="number" min="0" max="50" step="0.5" value="3"><span class="ilbl">왼쪽</span></div>
+        <div><input id="pr" type="number" min="0" max="50" step="0.5" value="3"><span class="ilbl">오른쪽</span></div>
+      </div>
+      <div class="row r3">
+        <div><label>가로 이동(mm)</label><input id="dx" type="number" min="-20" max="20" step="0.5" value="0"></div>
+        <div><label>세로 이동(mm)</label><input id="dy" type="number" min="-20" max="20" step="0.5" value="0"></div>
+        <div><label>배율(%)</label><input id="sc" type="number" step="1" min="80" max="100" value="100"></div>
+      </div>
+      <div id="clearInfo" class="hint" style="margin:2px 0 6px"></div>
+      <div class="chk"><input type="checkbox" id="marks" onchange="renderAll()"><label for="marks" style="margin:0">라벨 외곽선 인쇄 (정합 확인용)</label></div>
+      <p class="hint"><b>아래가 잘릴 때</b> → <b>레이저 프린터</b> 프리셋(사방 4mm)을 먼저 누르세요. 그래도 잘리면 <b>아래 여백</b>만 5, 6으로 올립니다.
+      <b>위 여백을 줄여도 아래 잘림은 그대로입니다</b> — 라벨 높이가 고정이라 푸터 끝 위치는 <b>아래 여백</b>이 정하고, 위 여백을 줄이면 가운데 QR·본문만 커집니다.<br>
+      브라우저 인쇄 대화상자에서 <b>배율 100%</b>·<b>여백 없음</b>·<b>머리글/바닥글 해제</b>도 항상 확인하세요.
+      배율을 100%에서 내리면 볼트 측면 도면의 1:1 대조가 깨집니다.</p>
+    </fieldset>
+
+    <fieldset id="a4box">
+      <legend>② A4 시트 격자</legend>
+      <div class="row r2">
+        <div><label>좌 여백(mm)</label><input id="mx" type="number" min="0" max="100" step="0.5" value="5"></div>
+        <div><label>상 여백(mm)</label><input id="my" type="number" min="0" max="100" step="0.5" value="8.5"></div>
+      </div>
+      <div class="row r2">
+        <div><label>열 간격(mm)</label><input id="gx" type="number" min="0" max="100" step="0.5" value="0"></div>
+        <div><label>행 간격(mm)</label><input id="gy" type="number" min="0" max="100" step="0.5" value="0"></div>
+      </div>
+      <div id="gridInfo" class="hint"></div>
+      <p class="hint">일반 A4에 시험 인쇄해 라벨지에 겹쳐 보고 맞추세요. A4 모드에서 <b>정합 테스트 인쇄</b>를 누르면 격자 전체가 인쇄됩니다.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>③ QR · 바코드</legend>
+      <label>QR 인코딩 방식</label>
+      <select id="qmode" onchange="renderAll()">
+        <option value="url">URL형 – 폰 카메라로 바로 입출고 폼 열림</option>
+        <option value="txt">텍스트형 – 스캐너로 시트에 바로 입력</option>
+        <option value="ims" selected>LOT-IMS 호환 – "품번 (Rev)" 만 인코딩</option>
+      </select>
+      <label>기준 URL (URL형일 때)</label>
+      <input id="base" value="https://hlr.kr/io" oninput="scheduleRender()">
+      <p class="hint">Apps Script 원본 URL은 너무 길어 QR 셀이 작아집니다. 짧은 리다이렉트 주소를 쓰세요.</p>
+      <div id="qrDiag" class="hint"></div>
+      <p class="hint">셀(모듈) <b>0.37mm 이상</b>을 양호로 봅니다 — 현재 프린터·유포지 조합에서
+        <b>0.38mm 인식을 확인</b>했습니다. 용지나 프린터를 바꾸면 다시 확인하세요.</p>
+      <label>오류정정 레벨</label>
+      <select id="ecc" onchange="renderAll()">
+        <option value="M">M (15%) – 실내 보관</option>
+        <option value="Q">Q (25%) – 기름·분진·마찰 환경</option>
+      </select>
+      <div class="chk"><input type="checkbox" id="c128" checked onchange="renderAll()"><label for="c128" style="margin:0">1D 바코드(Code128) 함께 인쇄</label></div>
+      <label>1D 바코드 내용</label>
+      <select id="c128v" onchange="renderAll()"><option value="pn">품번</option><option value="box">박스 ID</option></select>
+    </fieldset>
+
+    <fieldset>
+      <legend>④ 표시 · 글자 · 괘선</legend>
+      <div class="chk"><input type="checkbox" id="logoOn" checked onchange="renderAll()"><label for="logoOn" style="margin:0">회사 로고 인쇄</label></div>
+      <div class="row r2" style="margin-top:8px">
+        <div><label>글자 크기 배율</label><input id="fs" type="number" step="0.05" min="0.7" max="1.3" value="1"></div>
+        <div><label>괘선 두께(mm)</label><input id="bw" type="number" step="0.05" min="0.1" max="0.8" value="0.35"></div>
+      </div>
+      <p class="hint">품명이 길어 잘리면 글자 배율을 0.9로. 열전사 프린터에서 괘선이 뭉치면 0.25mm로.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑤ 박스 ID 채번</legend>
+      <div class="row r2">
+        <div><label>접두</label><input id="bp" value="B"></div>
+        <div><label>시작 번호</label><input id="bs" type="number" min="1" step="1" value="1"></div>
+      </div>
+      <p class="hint">박스 ID = 접두 + YYMMDD + 일련번호. 라벨 1장 = 실물 박스 1개.<br>
+        순번은 <b>입고일별로 이 브라우저에 저장</b>되므로 창을 닫고 다시 열어도 이어집니다.
+        라벨 훼손으로 재인쇄할 때만 시작 번호를 원래 값으로 되돌리세요 — <b>박스 ID는 반드시 원래 번호를 유지</b>합니다.</p>
+    </fieldset>
+
+    <p class="hint" style="padding:0 2px">정합값이 확정되면 <code>assets/js/core.js</code> 의
+      <code>const CAL = {…}</code> 숫자를 고쳐 저장해두면 다음에 열 때도 그대로 적용됩니다.</p>
+  </div>
+</div>
+
+<div class="main">
+  <div class="warnbar no-print">인쇄 대화상자에서 <b>배율 100%</b> · <b>여백 없음</b> · <b>머리글/바닥글 해제</b>를
+    확인하세요 — 아래가 잘리는 원인의 대부분입니다. 그래도 잘리면 디테일 설정 ①에서 <b>아래 여백</b>을 5~6mm로 올리세요.</div>
+  <div class="bar">
+    <button class="pri" onclick="doPrint()">인쇄</button>
+    <span class="tag" id="cnt">0장</span>
+    <span class="sp"></span>
+    <button onclick="zoom(-1)">축소</button><button onclick="zoom(1)">확대</button>
+    <button onclick="clearAll()">전체 비우기</button>
+  </div>
+  <div id="listWrap" class="no-print"></div>
+  <div class="preview" id="prev"></div>
+</div>
+</div>
+</body>
+</html>
