@@ -46,6 +46,12 @@ function commitSeq(lastSeq){
 }
 /* 입고일 기준으로 다음 번호를 시작 번호 칸에 채운다 (시작 시 · 입고일 변경 시) */
 function syncSeq(){ $('bs').value = (seqStore()[seqDateKey()] || 0) + 1; }
+/* 발행 직후 시작 번호 칸을 다음 번호로 되돌린다 — 저장값(이미 쓴 마지막 번호)을 하한으로 둔다.
+   재인쇄(문서 §4)로 시작 번호를 손으로 내리면 발행 후 칸도 그 뒤 번호에서 멈추므로,
+   하한이 없으면 같은 세션에서 이어 발행할 때 이미 붙인 박스 ID를 다시 찍는다. */
+function restoreSeq(nextSeq){
+  $('bs').value = Math.max(nextSeq, (seqStore()[seqDateKey()] || 0) + 1);
+}
 function nextBox(seq){
   const d = $('dt').value || localIsoDate();
   return `${$('bp').value}${yymmdd(d)}-${String(seq).padStart(3,'0')}`;
@@ -103,8 +109,8 @@ function addLabels(){
         prod:$('bProd').value.trim(), cat:$('bCat').value.trim(), pos:$('bPos').value.trim(),
         perBot:$('bPerBot').value.trim(), box:nextBox(bseq)});
     }
-    $('bs').value = bseq;
     commitSeq(bseq - 1);
+    restoreSeq(bseq);
     renderAll(); return;
   }
   if(!$('pn').value.trim()){ alert('품번을 입력하세요.'); return; }
@@ -116,8 +122,8 @@ function addLabels(){
       pj:$('pj').value.trim(),qty:$('qty').value.trim(),unit:$('unit').value,
       vd:$('vd').value.trim(),dt:$('dt').value,loc:$('loc').value.trim(),box:nextBox(seq)});
   }
-  $('bs').value = seq;
   commitSeq(seq - 1);
+  restoreSeq(seq);
   renderAll();
 }
 /* 셀 분리 — 엑셀 복사(탭)와 CSV 모두 지원.
@@ -209,8 +215,8 @@ function importCsv(){
         grade:r.grade, mat:r.mat, dk:String(dim.dk), k:String(dim.k),
         prod:r.prod, cat:r.cat, pos:r.pos, perBot:(r.perBot || '') + '', box:nextBox(seq++)});
     });
-    $('bs').value = seq;
     commitSeq(seq - 1);
+    restoreSeq(seq);
     $('csv').value = ''; renderAll();
     if(take < merged.length) alert(`목록 상한(${MAX_LABELS}장)에 도달해 일부만 추가했습니다.`);
     else if(invalidRows) alert(`형식이 잘못된 ${invalidRows}개 행은 제외했습니다.`);
@@ -239,8 +245,8 @@ function importCsv(){
         unit:c[6]||'EA',loc:c[7]||'',vd:c[8]||'',dt:$('dt').value,box:nextBox(seq)});
     }
   });
-  $('bs').value = seq;
   commitSeq(seq - 1);
+  restoreSeq(seq);
   $('csv').value=''; renderAll();
   if(stop) alert(`목록 상한(${MAX_LABELS}장)에 도달해 일부만 추가했습니다.`);
 }

@@ -115,27 +115,26 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 /* 여러 줄이 들어가는 칸은 위쪽 정렬 — 중앙 정렬이면 넘칠 때 캡션이 먼저 잘린다 */
 .r-nm .fc,.r-ap .fc{justify-content:flex-start}
 
-/* 푸터 — 높이는 인라인 style(=JS 상수)이 정한다.
-   flex-basis 를 mm 로 못 박으면 인라인 height 를 덮어써서 QR 이 계산보다 작게 인쇄된다. */
+/* 푸터 — 높이는 인라인 style(=JS 상수 FOOT_H)이 정한다.
+   flex-basis 를 mm 로 못 박으면 인라인 height 를 덮어써서 QR 이 계산보다 작게 인쇄된다.
+   자재·볼트 라벨이 같은 높이(10.2mm)를 쓰므로 푸터 규칙은 한 벌만 둔다 — 종류별로
+   나눠 두면 한쪽만 고쳐져 두 라벨의 스캔 위치가 어긋난다. */
 .lb-foot{flex:0 0 auto;display:flex;border:var(--bw,.35mm) solid #000}
+/* QR 칸에는 여백을 두지 않는다 — quiet zone 은 QR 자체가 모듈 수로 갖고 있고,
+   여기에 패딩을 더하면 셀만 작아져 인식이 나빠진다. 폭은 푸터 높이와 같아 정사각형이 된다. */
+.mat-foot-qr,.bolt-foot-qr{width:var(--qr-w,10.2mm);flex:0 0 var(--qr-w,10.2mm);padding:0;
+  border-right:var(--bw,.35mm) solid #000;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mat-foot-qr svg,.bolt-foot-qr svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
 /* 1D 바코드는 QR 오른쪽의 남은 폭을 사용한다. 막대는 세로 비율을 자유롭게 늘려도 정보가 변하지 않으므로
    막대(SVG)와 사람이 읽는 문자(HTML)를 분리해 각각 최적 크기로 인쇄한다. */
-.bcbox{flex:1;min-width:0;padding:.5mm 1.2mm;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-.bcbars{width:100%;height:6.2mm;flex:0 0 6.2mm}
+.bcbox{flex:1;min-width:0;padding:.4mm 1.2mm;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.bcbars{width:100%;height:5.2mm;flex:0 0 5.2mm}
 .bcbars svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
-.bctext{font-size:calc(2.4mm * var(--fs,1));font-weight:700;text-align:center;letter-spacing:.08em;line-height:1.05;margin-top:.5mm}
+.bctext{font-size:calc(2mm * var(--fs,1));font-weight:700;text-align:center;letter-spacing:.08em;line-height:1.05;margin-top:.3mm}
 
 /* 자재류 라벨 — 본문은 시안형 정보 배치, QR과 1D 바코드는 하단에 나란히 둔다. */
 .matmode .lb-logo img{height:5.6mm;width:auto}
-/* QR 칸에는 여백을 두지 않는다 — quiet zone 은 QR 자체가 모듈 수로 갖고 있고,
-   여기에 패딩을 더하면 셀만 작아져 인식이 나빠진다. */
-.mat-foot-qr{width:var(--qr-w,12.5mm);flex:0 0 var(--qr-w,12.5mm);padding:0;
-  border-right:var(--bw,.35mm) solid #000;
-  display:flex;align-items:center;justify-content:center;overflow:hidden}
-.mat-foot-qr svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
-.matmode .bcbox{padding:.4mm 1.2mm}
-.matmode .bcbars{height:5.2mm;flex:0 0 5.2mm}
-.matmode .bctext{font-size:calc(2mm * var(--fs,1));margin-top:.3mm}
 
 /* 볼트류 라벨 */
 .label.boltmode .lb-head{align-items:center}
@@ -172,15 +171,7 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 .v-ap .ml{display:flex;justify-content:space-between;align-items:baseline;gap:1mm;line-height:1.15;font-weight:600}
 .v-ap .mt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v-ap .mq{flex:0 0 auto;font-weight:800}
-/* 볼트 QR — 1D 바코드 왼쪽에 배치해 측면 도면 칸을 13mm 넓힌다. 칸 안 여백은 두지 않는다. */
-.bolt-foot-qr{width:var(--qr-w,10.2mm);flex:0 0 var(--qr-w,10.2mm);padding:0;
-  border-right:var(--bw,.35mm) solid #000;
-  display:flex;align-items:center;justify-content:center;overflow:hidden}
-.bolt-foot-qr svg{width:100%;height:100%;display:block;shape-rendering:crispEdges}
-/* 볼트 라벨 푸터 — QR + 1D 바코드 */
-.boltmode .bcbox{padding:.4mm 1.2mm}
-.boltmode .bcbars{height:5.2mm;flex:0 0 5.2mm}
-.boltmode .bctext{font-size:calc(2mm * var(--fs,1));margin-top:.3mm}
+/* 볼트 QR 은 1D 바코드 왼쪽에 배치해 측면 도면 칸을 넓힌다 — 칸 규칙은 위 [푸터] 절 공용. */
 
 /* 로케이션 라벨 */
 .lm-top{display:flex;align-items:center;gap:3mm;flex:1}

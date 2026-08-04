@@ -208,7 +208,7 @@
       <select id="qmode" onchange="renderAll()">
         <option value="url">URL형 – 폰 카메라로 바로 입출고 폼 열림</option>
         <option value="txt">텍스트형 – 스캐너로 시트에 바로 입력</option>
-        <option value="ims" selected>LOT-IMS 호환 – "품번 (Rev)" 만 인코딩</option>
+        <option value="ims" selected>LOT-IMS 호환 – "품번 (Rev)" 만 인코딩 (기본)</option>
       </select>
       <label>기준 URL (URL형일 때)</label>
       <input id="base" value="https://hlr.kr/io" oninput="scheduleRender()">
@@ -223,7 +223,12 @@
       </select>
       <div class="chk"><input type="checkbox" id="c128" checked onchange="renderAll()"><label for="c128" style="margin:0">1D 바코드(Code128) 함께 인쇄</label></div>
       <label>1D 바코드 내용</label>
-      <select id="c128v" onchange="renderAll()"><option value="pn">품번</option><option value="box">박스 ID</option></select>
+      <select id="c128v" onchange="renderAll()">
+        <option value="pn" selected>품번 (기본)</option>
+        <option value="box">박스 ID</option>
+      </select>
+      <p class="hint">기본값은 <b>품번</b>입니다 — QR과 1D 바코드가 모두 품번을 담아, 스캐너·폰 어느 쪽으로 읽어도
+        같은 품번이 나옵니다. <b>박스 ID</b>로 바꾸면 1D 바코드에는 품번이 들어가지 않습니다(QR에는 그대로 남습니다).</p>
     </fieldset>
 
     <fieldset>

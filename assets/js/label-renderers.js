@@ -4,9 +4,13 @@ const _qrCache = new Map(), _bcCache = new Map();
 /* 라벨 칸 치수(mm) — CSS 는 applyStyles() 가 주입하는 변수로 이 값을 그대로 쓴다.
    여기 숫자만 고치면 화면·인쇄·QR 진단이 함께 따라온다. */
 const FC_PAD = 1.4;                                    // .fc 좌우 패딩(mm)
-const MAT_LAYOUT = Object.freeze({ headerH:9, footerH:12.5, qrW:12.5, revW:10 });
+/* 자재·볼트 라벨의 푸터(QR + 1D 바코드)는 높이를 10.2mm 로 통일한다 —
+   두 라벨을 같은 박스 랙에 섞어 붙이므로 스캔 위치가 같아야 하고,
+   QR 칸은 정사각형이어야 하므로 폭도 같은 값을 쓴다(남는 폭은 1D 바코드가 가져간다). */
+const FOOT_H = 10.2;
+const MAT_LAYOUT = Object.freeze({ headerH:9, footerH:FOOT_H, qrW:FOOT_H, revW:10 });
 const BOLT_LAYOUT = Object.freeze({
-  headerH:5.2, footerH:10.2, qrW:10.2,
+  headerH:5.2, footerH:FOOT_H, qrW:FOOT_H,
   sideW:55, topW:15, gradeW:10,
   heroH:15.5, shapeH:11.5
 });
@@ -147,7 +151,7 @@ function matLabel(it){
   const loc = it.loc
     ? `<div class="loc"><span class="cap">LOC 로케이션</span><span class="v">${esc(it.loc)}</span></div>`
     : `<div class="loc blank"><span class="cap">LOC 로케이션</span><span class="v">&nbsp;</span></div>`;
-  const bc = barcodeHtml(it, 3.6);
+  const bc = barcodeHtml(it, 3.4);      /* 푸터 높이가 볼트 라벨과 같으므로 문자 크기도 같게 */
   const M  = num('fs') || 1, bw = num('bw');
   /* 시안 순서: 품번/REV → 품명 → 기종/협력사/입고일/BOX ID → QR/1D 바코드 */
   const bodyH  = Math.max(18, num('lh') - num('pt') - num('pb') - MAT_LAYOUT.headerH - MAT_LAYOUT.footerH);
