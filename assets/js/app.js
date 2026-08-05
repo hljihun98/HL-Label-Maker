@@ -1,5 +1,5 @@
 const MAX_LABELS = 400;      // 브라우저가 감당하는 현실적 상한 (QR·바코드가 라벨마다 들어감)
-const PREVIEW_MAX = 24;      // 미리보기는 앞부분만 — 수백 장을 화면에 그리면 느려진다
+const PREVIEW_MAX = 50;      // 미리보기는 앞부분만 — 수백 장을 화면에 그리면 느려진다
 
 function roomLeft(){ return MAX_LABELS - items.length; }
 function capWarn(want){
@@ -193,13 +193,18 @@ function importCsv(){
       const map = new Map();
       rows.forEach(r=>{
         const key = [r.head, r.dia, r.len, r.mat, r.grade].join('|');
-        const m = map.get(key);
-        if(!m){ map.set(key, { ...r, prods:[pcOf(r)].filter(Boolean), poss:[posOf(r)].filter(Boolean) }); return; }
+        let m = map.get(key);
+        if(!m){ m = { ...r, prods:[], posQty:new Map(), perBot:0 }; map.set(key, m); }
         if(pcOf(r) && !m.prods.includes(pcOf(r))) m.prods.push(pcOf(r));
-        if(r.pos && !m.poss.includes(posOf(r))) m.poss.push(posOf(r));
+        /* 위치는 이름 단위로 개수를 합산한다 — BOM 이 서브어셈블리별로 쪼개져 있어
+           같은 위치가 여러 줄로 들어온다. 완성된 "위치 : 개수" 문자열로 중복을 제거하면
+           개수가 같은 줄(FRT:4 / FRT:4)이 하나 버려져 라벨 개수가 실제보다 적게 찍히고,
+           개수만 다른 줄(FRT:16 / FRT:12)은 남아 한 곳이 두 곳으로 부풀려진다. */
+        if(r.pos) m.posQty.set(r.pos, (m.posQty.get(r.pos) || 0) + r.perBot);
         m.perBot += r.perBot;
       });
-      merged = [...map.values()].map(m=>({ ...m, prod:m.prods.join('\n'), cat:'', pos:m.poss.join('\n') }));
+      merged = [...map.values()].map(m=>({ ...m, prod:m.prods.join('\n'), cat:'',
+        pos:[...m.posQty].map(([pos, qty]) => pos + (qty ? ' : ' + qty : '')).join('\n') }));
     } else {
       merged = rows.map(r=>({ ...r, prod:pcOf(r), cat:'', pos:posOf(r) }));
     }
@@ -218,8 +223,15 @@ function importCsv(){
     commitSeq(seq - 1);
     restoreSeq(seq);
     $('csv').value = ''; renderAll();
-    if(take < merged.length) alert(`목록 상한(${MAX_LABELS}장)에 도달해 일부만 추가했습니다.`);
-    else if(invalidRows) alert(`형식이 잘못된 ${invalidRows}개 행은 제외했습니다.`);
+    /* 붙여넣은 줄 수보다 라벨이 적게 나오는 경우가 두 가지라 어느 쪽인지 밝힌다 —
+       합치기로 줄어든 것을 누락으로 오해하면 붙여넣기를 반복해 박스 ID만 낭비한다. */
+    const notes = [];
+    if(take < merged.length) notes.push(`목록 상한(${MAX_LABELS}장)에 도달해 ${take}장만 추가했습니다.`);
+    if(invalidRows) notes.push(`형식이 잘못된 ${invalidRows}개 행은 제외했습니다 (머리·직경·길이 열을 확인하세요).`);
+    if(merged.length < rows.length) notes.push(
+      `${rows.length}개 행을 동일 규격끼리 합쳐 ${merged.length}종 = ${take}장이 되었습니다.`
+      + `\n행마다 라벨이 필요하면 [동일 규격 합치기]를 끄고 다시 붙여넣으세요.`);
+    if(notes.length) alert(notes.join('\n\n'));
     return;
   }
   // LOT-IMS 재고현황 CSV 헤더 자동 인식 → 품번/리비전/품명/제품군/단위/현재고/안전재고/상태/보관위치
