@@ -9,6 +9,9 @@ const FC_PAD = 1.4;                                    // .fc 좌우 패딩(mm)
    QR 칸은 정사각형이어야 하므로 폭도 같은 값을 쓴다(남는 폭은 1D 바코드가 가져간다). */
 const FOOT_H = 10.2;
 const MAT_LAYOUT = Object.freeze({ headerH:9, footerH:FOOT_H, qrW:FOOT_H, revW:10 });
+/* 링크 라벨 QR — 로케이션(34mm)보다 키운다. 주소는 코드보다 데이터가 길어 모듈 수가 늘고,
+   같은 칸에 넣으면 셀 한 변이 인식 한계(0.37mm) 아래로 떨어진다. */
+const LINK_QR = 40;
 const BOLT_LAYOUT = Object.freeze({
   headerH:5.2, footerH:FOOT_H, qrW:FOOT_H,
   sideW:55, topW:15, gradeW:10,
@@ -77,6 +80,17 @@ function fitWrap(text, availMm, max1, max2, minMm, weight, family){
 }
 const mlHtml = r => r.lines.map(l=>`<span class="ml">${esc(l)}</span>`).join('');
 
+/* 줄은 손으로 넣은 자리에서만 바뀌고, 글자 크기는 그 줄들이 칸에 들어가도록 자동으로 줄어든다.
+   자동 줄나눔을 쓰지 않는 이유 — 제목이 어디서 갈릴지는 쓰는 사람이 정해야 한다.
+   글자를 조금 키우려고 "작업 / 표준서" 처럼 임의로 쪼개면 라벨마다 줄 수가 달라져 인쇄가 들쭉날쭉해진다. */
+function fitBlock(text, availMm, boxH, maxMm, minMm, weight, family){
+  const lines = String(text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if(!lines.length) return { fs:maxMm, lines:['-'] };
+  const vCap = Math.min(maxMm, (boxH - 2.2) / (lines.length * 1.18));   // 상하 패딩 1mm×2 + 반올림 여유
+  const widest = lines.reduce((a, l) => Math.max(a, textW1(l, weight, family)), 0.1);
+  return { fs: fsv(Math.max(minMm, Math.min(vCap, availMm / widest))), lines };
+}
+
 /* 라벨 본문(헤더·푸터 제외)의 실제 높이 — 여백을 바꾸면 여기부터 달라진다 */
 const fmtN = n => Number(n||0).toLocaleString('ko-KR');
 const mmv = v => Math.round(v * 100) / 100;      // 인라인 mm 값 정리
@@ -95,6 +109,7 @@ const innerWmm = () => Math.max(40, num('lw') - num('pl') - num('pr'));
 function qrPrintSide(type){
   const bw = num('bw');
   if(type === 'loc') return Math.max(4, 34 - bw*2 - 0.4);            // 34mm 칸 − 테두리 − 패딩 0.2mm×2
+  if(type === 'link') return Math.max(4, LINK_QR - bw*2 - 0.4);
   if(type === 'bolt' || type === 'mat'){
     const layout = type === 'bolt' ? BOLT_LAYOUT : MAT_LAYOUT;
     return Math.max(4, Math.min(layout.qrW - bw, layout.footerH - bw*2));
@@ -119,6 +134,9 @@ function qrUrl(params){
   return `${path}${separator}${query}${hash}`;
 }
 function qrData(it){
+  /* 링크 라벨은 주소 그대로 — 휴대폰 기본 카메라가 바로 열어야 하므로
+     사내 형식(HLR1|…)이나 조회 URL 로 감싸면 안 된다. */
+  if(it.type==='link') return it.url || '';
   if(it.type==='loc'){
     if($('qmode').value==='ims') return it.code;
     return $('qmode').value==='url'
@@ -226,6 +244,10 @@ function applyCell(text, availMm, M, rowH){
       + (o.q ? `<span class="mq mono">${esc(o.q)}개</span>` : '') + '</span>').join('') };
 }
 
+/* 접시머리는 같은 모양에 육각·십자 홈이 모두 쓰이므로 홈까지 적어야 실물이 특정된다 */
+const headText = it => (HEAD_LABEL[it.head] || it.head)
+  + (it.head === 'FLAT' && DRIVE_LABEL[it.drive] ? ` · ${DRIVE_LABEL[it.drive]}` : '');
+
 /* 볼트류 라벨 — 규격·강도 / 머리 형상 도면 / 1:1 측면 대조 / 적용 제품·위치(줄별 개수)
    M8×20 과 M8×30 혼입이 파스너 관리의 대표 사고이므로
    ① 규격을 최대 크기로 ② 실물을 라벨에 올려 맞추는 1:1 측면 도면 두 단계로 막는다. */
@@ -275,12 +297,75 @@ function boltLabel(it){
             <span class="bl-grade mono nowrap" style="font-size:calc(${grFs}mm * var(--fs,1))">${esc(it.grade)}</span></div>
         </div>
         <div class="fr r-shape" style="height:${mmv(shapeH)}mm">
-          <div class="fc w-top"><div class="dwg top">${headTopSvg(it.head)}</div></div>
+          <div class="fc w-top"><div class="dwg top">${headTopSvg(it.head, it.drive)}</div></div>
           <div class="fc w-side"><div class="bolt-side-art" style="width:${side.w}mm;height:${side.h}mm">${side.svg}</div></div>
           <div class="fc w-hm">
-            <span class="hm"><b>머리</b> ${esc(HEAD_LABEL[it.head] || it.head)}</span>
+            <span class="hm"><b>머리</b> ${esc(headText(it))}</span>
             <span class="hm"><b>재질</b> ${esc(it.mat||'-')}</span>
             <span class="hm mono">${dimMark}Ø${mmv(dk)} × ${mmv(k)}</span></div>
+        </div>
+        <div class="fr r-ap" style="height:${mmv(apH)}mm">
+          <div class="fc w-ap"><span class="cap">적용 제품${pr.count>1?` <i>${pr.count}종</i>`:''}</span>
+            <span class="v-ap" style="font-size:calc(${pr.fs}mm * var(--fs,1))">${pr.html}</span></div>
+          <div class="fc w-ap"><span class="cap">적용 위치${po.count>1?` <i>${po.count}곳</i>`:''}${po.total?` · 계 ${fmtN(po.total)}개`:''}</span>
+            <span class="v-ap" style="font-size:calc(${po.fs}mm * var(--fs,1))">${po.html}</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="lb-foot" style="height:${mmv(footH)}mm">
+      <div class="bolt-foot-qr">${qrSvg(qrData(it), 2)}</div><div class="bcbox">${bc}</div></div>
+  </div>`;
+}
+
+/* 워셔 라벨 — 볼트 라벨과 골격이 같다(같은 랙에 섞여 붙으므로 스캔 위치가 어긋나면 안 된다).
+   다른 것은 세 곳뿐이다: 규격 표기가 두께 기준 · 강도 칸을 종류 칸으로 전용 · 도면.
+   워셔는 강도 등급이 없고, 볼트가 들어가는 내경과 체결력을 정하는 두께가 사고 원인이다. */
+function washerLabel(it){
+  const M = num('fs') || 1, bw = num('bw');
+  const logo = $('logoOn').checked ? `<div class="lb-logo">${LOGO_USE}</div>` : '';
+  const bc = barcodeHtml(it, 3.4);
+
+  const d1 = Number(it.d1) || 0, d2 = Number(it.d2) || 0, t = Number(it.thk) || 0;
+  const mark = it.approx ? '≈' : '';           // 두께 생략·표준값 없음 → 실측 필요
+
+  const footH  = BOLT_LAYOUT.footerH;
+  const bodyH  = Math.max(20, num('lh') - num('pt') - num('pb') - BOLT_LAYOUT.headerH - footH);
+  const heroH  = BOLT_LAYOUT.heroH;
+  const shapeH = BOLT_LAYOUT.shapeH;
+  const apH    = Math.max(4.8, bodyH - heroH - shapeH);
+  const innerW = innerWmm();
+
+  const specAvail  = Math.max(20, innerW - bw*3 - BOLT_LAYOUT.gradeW - FC_PAD*2);
+  const kindAvail  = Math.max(4, BOLT_LAYOUT.gradeW - FC_PAD*2);
+  const spec = `${it.dia} T${mmv(t)}`;
+  const kindText = WASHER_SHORT[it.kind] || '와셔';
+  const spFs = fsv(Math.min(fitMm(spec, specAvail/M, 11.5, 4, 800, MONO_FF), lineCap(heroH, 1)));
+  const knFs = fsv(Math.min(fitMm(kindText, kindAvail/M, 3.2, 1.6, 800, SANS_FF), lineCap(heroH, 1)));
+
+  const dwgH = Math.max(3, shapeH - 1.6 - bw);
+  const side = washerSideSvg(it.kind, d1, d2, t, BOLT_LAYOUT.sideW, dwgH);
+
+  const apAvail = Math.max(15, (innerW - bw*3)/2 - FC_PAD*2);
+  const pr = applyCell(it.cat ? splitMulti(it.prod).map(x=>x+' · '+it.cat).join('\n') : it.prod, apAvail, M, apH);
+  const po = applyCell(it.pos, apAvail, M, apH);
+
+  return `<div class="label boltmode">${frameHtml()}
+    <div class="lb-head" style="height:${BOLT_LAYOUT.headerH}mm">${logo}</div>
+    <div class="lb-body">
+      <div class="fields">
+        <div class="fr r-hero" style="height:${mmv(heroH)}mm">
+          <div class="fc w-spec"><span class="cap">규격 <i>SIZE</i></span>
+            <span class="bl-spec mono nowrap" style="font-size:calc(${spFs}mm * var(--fs,1))">${esc(spec)}</span></div>
+          <div class="fc w-grade"><span class="cap">구분</span>
+            <span class="bl-grade nowrap" style="font-family:${SANS_FF};font-size:calc(${knFs}mm * var(--fs,1))">${esc(kindText)}</span></div>
+        </div>
+        <div class="fr r-shape" style="height:${mmv(shapeH)}mm">
+          <div class="fc w-top"><div class="dwg top">${washerTopSvg(it.kind)}</div></div>
+          <div class="fc w-side"><div class="bolt-side-art" style="width:${side.w}mm;height:${side.h}mm">${side.svg}</div></div>
+          <div class="fc w-hm">
+            <span class="hm"><b>종류</b> ${esc(WASHER_LABEL[it.kind] || '와셔')}</span>
+            <span class="hm"><b>재질</b> ${esc(it.mat||'-')}</span>
+            <span class="hm mono">${mark}Ø${mmv(d2)} / ${mmv(d1)}</span></div>
         </div>
         <div class="fr r-ap" style="height:${mmv(apH)}mm">
           <div class="fc w-ap"><span class="cap">적용 제품${pr.count>1?` <i>${pr.count}종</i>`:''}</span>
@@ -306,5 +391,36 @@ function locLabel(it){
   </div>`;
 }
 
-const labelOf = it => it.type==='loc' ? locLabel(it) : it.type==='bolt' ? boltLabel(it) : matLabel(it);
+/* 링크 라벨 — QR 을 찍으면 주소가 바로 열린다. 오른쪽 두 칸은 무엇을 여는 링크인지
+   손으로 확인하는 용도라, 통로에서 읽히도록 반전 블록에 최대 크기로 넣는다. */
+function linkLabel(it){
+  const M = num('fs') || 1;
+  const logo = $('logoOn').checked ? `<div class="lm-logo">${LOGO_USE}</div>` : '<span></span>';
+  /* 칸 안쪽 폭 = 라벨 안폭 − QR − 칸 사이 간격(3mm) − 좌우 패딩(1.6mm×2) − 좌우 괘선 */
+  const avail = Math.max(12, innerWmm() - LINK_QR - 3 - 3.2 - num('bw')*2);
+  const gap = 1.6;
+  const nameH = (LINK_QR - gap) * (1.35/2.35), descH = (LINK_QR - gap) * (1/2.35);
+  /* 최소 크기는 인쇄 가독 한계까지만 내려간다 — 여기까지 줄여도 안 들어가는 문장은
+     칸 안에서 접히므로 글자가 사라지지는 않는다. */
+  const name = fitBlock(it.name, avail/M, nameH, 9, 1.8, 800, SANS_FF);
+  const desc = fitBlock(it.desc, avail/M, descH, 4.6, 1.5, 700, SANS_FF);
+
+  return `<div class="label linkmode">${frameHtml()}
+    <div class="lm-top">
+      <div class="lk-qr">${qrSvg(qrData(it), 2)}</div>
+      <div class="lk-txt">
+        <div class="lk-box lk-name" style="font-size:calc(${fsv(name.fs)}mm * var(--fs,1))">
+          <span>${mlHtml(name)}</span></div>
+        <div class="lk-box lk-desc" style="font-size:calc(${fsv(desc.fs)}mm * var(--fs,1))">
+          <span>${mlHtml(desc)}</span></div>
+      </div>
+    </div>
+    <div class="lm-foot">${logo}<span class="lk-tag">LINK</span></div>
+  </div>`;
+}
+
+const labelOf = it => it.type==='loc' ? locLabel(it)
+  : it.type==='link' ? linkLabel(it)
+  : it.type==='bolt' ? (it.form==='washer' ? washerLabel(it) : boltLabel(it))
+  : matLabel(it);
 const frameHtml = () => $('marks').checked ? '<div class="frame"></div>' : '';

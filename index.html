@@ -24,6 +24,7 @@
       <option value="mat">자재 라벨 (파트박스용)</option>
       <option value="bolt">볼트류 라벨 (파스너 박스용)</option>
       <option value="loc">로케이션 라벨 (랙 칸 표시용)</option>
+      <option value="link">링크 라벨 (QR 바로가기용)</option>
     </select>
   </fieldset>
 
@@ -56,36 +57,49 @@
 
   <div id="boltForm" style="display:none">
   <fieldset>
-    <legend>볼트 규격</legend>
+    <legend id="boltLegend">볼트 규격</legend>
     <div class="row r3">
       <div><label>머리 형상</label>
         <select id="bHead" onchange="boltAuto()">
-          <option value="SOCKET">SOCKET 육각소켓</option>
-          <option value="HEX">HEX 헥사 볼트</option>
-          <option value="PHILLIPS">PHILLIPS 십자</option>
-          <option value="FLANGE">FLANGE 플랜지</option>
-          <option value="BUTTON">BUTTON 버튼</option>
-          <option value="TORX">TORX 별</option>
-          <option value="SET">SET 무두</option>
+          <optgroup label="볼트">
+            <option value="SOCKET">SOCKET 육각소켓</option>
+            <option value="HEX">HEX 헥사 볼트</option>
+            <option value="FLAT">FLAT 접시머리</option>
+            <option value="PHILLIPS">PHILLIPS 십자</option>
+            <option value="FLANGE">FLANGE 플랜지</option>
+            <option value="BUTTON">BUTTON 버튼</option>
+            <option value="TORX">TORX 별</option>
+            <option value="SET">SET 무두</option>
+          </optgroup>
+          <optgroup label="워셔">
+            <option value="WASHER">WASHER 평와셔</option>
+            <option value="WASHER-SP">WASHER 스프링와셔</option>
+          </optgroup>
         </select></div>
       <div><label>직경 (M)</label><input id="bDia" value="M8" oninput="boltAuto()"></div>
-      <div><label>길이 (L, mm)</label><input id="bLen" type="number" min="0.1" step="0.1" value="30" oninput="updateBoltCode()"></div>
+      <div><label id="bLenLabel">길이 (L, mm)</label><input id="bLen" type="number" min="0.1" step="0.1" value="30" oninput="updateBoltCode()"></div>
     </div>
-    <div class="row r2">
-      <div><label>강도 구분</label>
+    <div class="row r2" id="bMetaRow">
+      <div id="bGradeCell"><label>강도 구분</label>
         <select id="bGrade" onchange="updateBoltCode()">
           <option value="12.9">12.9</option><option value="10.9">10.9</option>
           <option value="8.8">8.8</option><option value="A2-70">A2-70 (STS)</option>
         </select></div>
       <div><label>재질</label><input id="bMat" value="SCM435"></div>
+      <div id="bDriveCell" style="display:none"><label>홈 <span class="tag">(공구 자리)</span></label>
+        <select id="bDrive" onchange="boltAuto()">
+          <option value="SOCKET">육각소켓</option>
+          <option value="PHILLIPS">십자</option>
+          <option value="TORX">별</option>
+        </select></div>
     </div>
-    <label>머리 치수 <span class="tag">(1:1 도면용 · 규격에서 자동, 수정 가능)</span></label>
+    <label id="bDimLabel">머리 치수 <span class="tag">(1:1 도면용 · 규격에서 자동, 수정 가능)</span></label>
     <div class="row r2">
-      <div><input id="bDk" type="number" step="0.1"><span class="ilbl">머리 지름 dk</span></div>
-      <div><input id="bK" type="number" step="0.1"><span class="ilbl">머리 높이 k</span></div>
+      <div><input id="bDk" type="number" step="0.1"><span class="ilbl" id="bDkLabel">머리 지름 dk</span></div>
+      <div><input id="bK" type="number" step="0.1"><span class="ilbl" id="bKLabel">머리 높이 k</span></div>
     </div>
     <p class="hint" id="dimNote"></p>
-    <p class="hint">측면 도면은 <b>배율 100% 인쇄에서 항상 1:1</b>입니다(축소하지 않습니다).
+    <p class="hint" id="boltDwgNote">측면 도면은 <b>배율 100% 인쇄에서 항상 1:1</b>입니다(축소하지 않습니다).
       실물 볼트의 중심을 도면 아래 <b>중심선</b>에 맞춰 올리면 길이와 머리 두께를 그대로 대조할 수 있습니다.
       칸보다 큰 규격은 머리 위쪽이 잘리거나 길이 끝에 축약 기호(지그재그)가 그려집니다.</p>
     <label>사내 코드 <span class="tag">(규격에서 자동 생성 · 수정 가능)</span></label>
@@ -123,6 +137,25 @@
   </fieldset>
   </div>
 
+  <div id="linkForm" style="display:none">
+  <fieldset>
+    <legend>링크</legend>
+    <label>링크 명 <span class="tag">(Enter 로 줄바꿈)</span></label>
+    <textarea id="kname" style="min-height:40px">재고관리 시스템</textarea>
+    <label>링크 설명 <span class="tag">(Enter 로 줄바꿈)</span></label>
+    <textarea id="kdesc" style="min-height:52px">바코드로
+입·출고/재고/위치를 관리</textarea>
+    <label>주소 (URL)</label><input id="kurl" value="" placeholder="https://... (http 를 빼면 자동으로 붙습니다)">
+    <label>일괄 생성 <span class="tag">(한 줄에 하나: 링크명,설명,주소)</span></label>
+    <textarea id="kbulk" placeholder="재고관리 시스템,바코드로|입·출고 관리,https://intra/wms&#10;작업 표준서,조립 3라인,https://intra/sop-3"></textarea>
+    <p class="hint">QR 에는 <b>주소만</b> 담아 휴대폰 카메라로 찍으면 바로 열립니다 —
+      위 [QR 데이터 형식]과 무관하게 언제나 주소 그대로입니다.<br>
+      줄바꿈은 그대로 인쇄됩니다. 일괄 생성에서는 한 줄이 라벨 하나라 Enter 를 쓸 수 없으므로
+      <code>|</code> 를 넣으면 그 자리에서 줄이 바뀝니다.<br>
+      주소가 길수록 QR 이 촘촘해져 인식률이 떨어집니다. 아래 진단이 <b>주의·위험</b>이면 사내 단축주소를 쓰세요.</p>
+  </fieldset>
+  </div>
+
   <fieldset>
     <legend>용지</legend>
     <select id="paper" onchange="applyPaper()">
@@ -136,7 +169,7 @@
     <button onclick="renderAll()">미리보기 갱신</button>
   </div>
 
-  <fieldset style="margin-top:14px">
+  <fieldset style="margin-top:14px" id="csvWrap">
     <legend>일괄 등록 (CSV 붙여넣기)</legend>
     <textarea id="csv" placeholder="품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수"></textarea>
     <div class="chk" id="mergeWrap" style="display:none"><input type="checkbox" id="bMerge" checked>

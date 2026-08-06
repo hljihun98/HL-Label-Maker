@@ -59,7 +59,40 @@ function nextBox(seq){
 const startSeq = () => Math.max(1, parseInt($('bs').value)||1);
 
 /* ---------- 목록 ---------- */
+/* 주소에 스킴이 없으면 붙인다 — "intra/check" 만 적힌 QR 은 휴대폰 카메라가
+   링크로 인식하지 못해 라벨이 통째로 무용지물이 된다. */
+const normalizeUrl = value => {
+  const text = String(value || '').trim();
+  if(!text) return '';
+  return /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : 'https://' + text;
+};
 function addLabels(){
+  if($('mode').value==='link'){
+    const bulk = $('kbulk').value.trim();
+    const parsed = [];
+    try{
+      if(bulk){
+        bulk.split(/\r?\n/).filter(Boolean).forEach((line, index) => {
+          const cells = splitCells(line);
+          const name = (cells[0] || '').trim();
+          /* 주소는 마지막 열이지만 쿼리에 쉼표가 들어갈 수 있으므로 3번째부터 다시 이어 붙인다 */
+          const url = normalizeUrl(cells.slice(2).join(',').trim() || cells[1] || '');
+          if(!url) throw new Error(`${index + 1}번째 줄에 주소가 없습니다. 형식: 링크명,설명,주소`);
+          /* 일괄 생성은 한 줄이 라벨 하나라 Enter 를 쓸 수 없다 — | 를 줄바꿈으로 받는다 */
+          const desc = (cells.length > 2 ? cells[1] : '').trim().replace(/\s*\|\s*/g, '\n');
+          parsed.push({type:'link', name:name.replace(/\s*\|\s*/g, '\n'), desc, url});
+        });
+      } else {
+        const url = normalizeUrl($('kurl').value);
+        if(!url) throw new Error('링크 주소(URL)를 입력하세요.');
+        parsed.push({type:'link', name:$('kname').value.trim(), desc:$('kdesc').value.trim(), url});
+      }
+    }catch(error){ alert(error.message); return; }
+    const take = capWarn(parsed.length);
+    if(!take) return;
+    items.push(...parsed.slice(0, take));
+    renderAll(); return;
+  }
   if($('mode').value==='loc'){
     const bulk = $('lbulk').value.trim();
     if(bulk){
@@ -85,15 +118,22 @@ function addLabels(){
     renderAll(); return;
   }
   if($('mode').value==='bolt'){
-    const head = normalizeBoltHead($('bHead').value);
+    const kind = formWasherKind();                 // 머리 형상 칸이 워셔면 두 칸의 뜻이 달라진다
+    const head = kind ? '' : normalizeBoltHead($('bHead').value);
     const dia = normalizeThreadDia($('bDia').value);
-    const length = Number.parseFloat($('bLen').value);
-    const dk = Number.parseFloat($('bDk').value);
-    const k = Number.parseFloat($('bK').value);
-    if(!head){ alert('지원하는 볼트 머리 형상을 선택하세요.'); return; }
+    const length = Number.parseFloat($('bLen').value);   // 볼트=길이 L · 워셔=두께 T
+    const dk = Number.parseFloat($('bDk').value);        // 볼트=머리 지름 dk · 워셔=외경 d2
+    const k = Number.parseFloat($('bK').value);          // 볼트=머리 높이 k · 워셔=내경 d1
+    if(!kind && !head){ alert('지원하는 볼트 머리 형상을 선택하세요.'); return; }
     if(!dia){ alert('직경을 M8 또는 8 형식의 양수로 입력하세요.'); return; }
-    if(!Number.isFinite(length) || length <= 0){ alert('볼트 길이를 0보다 큰 숫자로 입력하세요.'); return; }
-    if(!Number.isFinite(dk) || dk <= 0 || !Number.isFinite(k) || k < 0){
+    if(!Number.isFinite(length) || length <= 0){
+      alert(kind ? '워셔 두께를 0보다 큰 숫자로 입력하세요.' : '볼트 길이를 0보다 큰 숫자로 입력하세요.'); return;
+    }
+    if(kind){
+      if(!Number.isFinite(dk) || !Number.isFinite(k) || k <= 0 || dk <= k){
+        alert('워셔 외경은 내경보다 크게, 내경은 0보다 크게 입력하세요.'); return;
+      }
+    } else if(!Number.isFinite(dk) || dk <= 0 || !Number.isFinite(k) || k < 0){
       alert('머리 지름은 0보다 크게, 머리 높이는 0 이상으로 입력하세요.'); return;
     }
     $('bDia').value = dia;
@@ -102,12 +142,14 @@ function addLabels(){
     if(!bn) return;
     let bseq = startSeq();
     for(let i=0;i<bn;i++,bseq++){
-      items.push({type:'bolt', pn:$('bCode').value.trim(), rev:'',
-        head, dia, len:String(length),
-        grade:$('bGrade').value, mat:$('bMat').value.trim(),
-        dk:String(dk), k:String(k),
-        prod:$('bProd').value.trim(), cat:$('bCat').value.trim(), pos:$('bPos').value.trim(),
-        perBot:$('bPerBot').value.trim(), box:nextBox(bseq)});
+      const common = { type:'bolt', pn:$('bCode').value.trim(), rev:'', dia,
+        mat:$('bMat').value.trim(), prod:$('bProd').value.trim(), cat:$('bCat').value.trim(),
+        pos:$('bPos').value.trim(), perBot:$('bPerBot').value.trim(), box:nextBox(bseq) };
+      items.push(kind
+        ? { ...common, form:'washer', kind, d2:String(dk), d1:String(k), thk:String(length), approx:false }
+        : { ...common, form:'bolt', head, len:String(length),
+            drive: head === 'FLAT' ? $('bDrive').value : (DRIVE_OF_HEAD[head] || ''),
+            grade:$('bGrade').value, dk:String(dk), k:String(k) });
     }
     commitSeq(bseq - 1);
     restoreSeq(bseq);
@@ -150,9 +192,6 @@ function boxCount(cells){
   const parsed = parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, MAX_LABELS) : 1;
 }
-/* 강도 표기 정리 — 현장에서 "12.9T"로 쓰므로 뒤에 붙는 T 를 떼고 라벨 표기와 맞춘다 */
-const normalizeGrade = value => String(value || '').trim().toUpperCase().replace(/\s*T$/, '');
-
 function importCsv(){
   const lines = $('csv').value.trim().split(/\r?\n/).filter(Boolean);
   if(!lines.length){ alert('붙여넣은 내용이 없습니다.'); return; }
@@ -160,26 +199,19 @@ function importCsv(){
   try{ table = lines.map(splitCells); }
   catch(error){ alert(error.message); return; }
 
-  /* 볼트 표 붙여넣기 — 적용제품,대분류,적용위치,머리,직경,길이,ASSY당,ASSY개수,1대당,재질,강도(선택) */
+  /* 볼트 표 붙여넣기 — 적용제품,대분류,적용위치,머리,직경,길이,ASSY당,ASSY개수,1대당,재질,강도(선택)
+     같은 표에 워셔가 섞여 들어오므로 행마다 볼트/워셔를 갈라 읽는다 (parseFastenerRow). */
   if($('mode').value==='bolt'){
-    const formGrade = $('bGrade').value;
+    const defaults = { grade:$('bGrade').value, mat:$('bMat').value.trim() };
     const rows = [];
     let invalidRows = 0;
     table.forEach(c=>{
       const first = String(c[0] || '').replace(/^\uFEFF/, '').trim();
       const diaCell = String(c[4] || '').trim();
       if(/^(적용\s*제품|product)$/i.test(first) || /^(직경|dia(?:meter)?)$/i.test(diaCell)) return;
-      const head = normalizeBoltHead(c[3] || 'SOCKET');
-      const dia = normalizeThreadDia(diaCell);
-      const lengthText = String(c[5] || '').trim().replace(',', '.').replace(/^L\s*/i, '');
-      const lengthMatch = lengthText.match(/^(-?\d+(?:\.\d+)?)\s*(?:MM)?$/i);
-      const lenNumber = lengthMatch ? Number(lengthMatch[1]) : NaN;
-      if(!head || !dia || !Number.isFinite(lenNumber) || lenNumber <= 0){ invalidRows++; return; }
-      const perAssy = Math.max(0, parseInt(c[6])||0), assyN = Math.max(0, parseInt(c[7])||0);
-      rows.push({ head, dia, len:String(lenNumber), mat:c[9]||$('bMat').value.trim(),
-        grade: normalizeGrade(c[10]) || formGrade,          // 강도 열이 없으면 화면에서 고른 값
-        prod:c[0]||'', cat:c[1]||'', pos:c[2]||'',
-        perBot: Math.max(0, parseInt(c[8]) || perAssy*assyN || 0) });
+      const row = parseFastenerRow(c, defaults);
+      if(!row){ invalidRows++; return; }
+      rows.push(row);
     });
     if(!rows.length){ alert('인식된 줄이 없습니다. 직경(M8) 열이 5번째인지 확인하세요.'); return; }
 
@@ -192,7 +224,11 @@ function importCsv(){
     if($('bMerge').checked){
       const map = new Map();
       rows.forEach(r=>{
-        const key = [r.head, r.dia, r.len, r.mat, r.grade].join('|');
+        /* 워셔는 볼트와 키 체계가 달라(길이·강도가 없다) form 을 키 맨 앞에 둔다 —
+           빼면 M10 볼트와 M10 워셔가 빈 칸끼리 맞아떨어져 한 라벨로 합쳐진다. */
+        const key = r.form === 'washer'
+          ? ['W', r.kind, r.dia, r.t, r.mat].join('|')
+          : ['B', r.head, r.drive, r.dia, r.len, r.mat, r.grade].join('|');
         let m = map.get(key);
         if(!m){ m = { ...r, prods:[], posQty:new Map(), perBot:0 }; map.set(key, m); }
         if(pcOf(r) && !m.prods.includes(pcOf(r))) m.prods.push(pcOf(r));
@@ -213,12 +249,17 @@ function importCsv(){
     if(!take) return;
     let seq = startSeq();
     merged.slice(0, take).forEach(r=>{
-      const code = ['BT', HEAD_ABBR[r.head] || 'BLT', r.dia+'X'+(r.len||'0'),
-                    r.grade.replace(/[^0-9A-Z]/gi,'')].join('-');
+      const common = { type:'bolt', rev:'', mat:r.mat, prod:r.prod, cat:r.cat, pos:r.pos,
+        perBot:(r.perBot || '') + '', box:nextBox(seq++) };
+      if(r.form === 'washer'){
+        items.push({ ...common, form:'washer', pn:washerCode(r.kind, r.dia, r.t),
+          kind:r.kind, dia:r.dia, d1:String(r.d1), d2:String(r.d2), thk:String(r.t), approx:r.approx });
+        return;
+      }
       const dim = headDims(r.head, r.dia);
-      items.push({type:'bolt', pn:code, rev:'', head:r.head, dia:r.dia, len:r.len,
-        grade:r.grade, mat:r.mat, dk:String(dim.dk), k:String(dim.k),
-        prod:r.prod, cat:r.cat, pos:r.pos, perBot:(r.perBot || '') + '', box:nextBox(seq++)});
+      items.push({ ...common, form:'bolt', pn:boltCode(r.head, r.dia, r.len, r.grade),
+        head:r.head, drive:r.drive, dia:r.dia, len:r.len, grade:r.grade,
+        dk:String(dim.dk), k:String(dim.k) });
     });
     commitSeq(seq - 1);
     restoreSeq(seq);
@@ -285,16 +326,20 @@ function renderAll(full){
   $('cnt').textContent = items.length + '장'
     + (items.length > shown.length ? ` (미리보기 ${shown.length}장)` : '');
   const desc = it => {
+    if(it.type === 'link') return `${it.desc ? it.desc + ' · ' : ''}${it.url}`;
     if(it.type === 'loc') return it.desc || '';
     if(it.type === 'bolt'){
       const positions = splitMulti(it.pos).length;
-      return `${HEAD_LABEL[it.head] || it.head} ${it.dia}×${it.len} ${it.grade} · ${it.mat}`
-        + (positions > 1 ? ` · 적용 ${positions}곳` : '');
+      const spot = positions > 1 ? ` · 적용 ${positions}곳` : '';
+      if(it.form === 'washer')
+        return `${WASHER_LABEL[it.kind] || '와셔'} ${it.dia} T${it.thk} · ${it.mat}` + spot;
+      return `${HEAD_LABEL[it.head] || it.head} ${it.dia}×${it.len} ${it.grade} · ${it.mat}` + spot;
     }
     return `${it.nm} · ${it.qty}${it.unit} · ${it.box} · ${it.loc||'로케이션 수기'}`;
   };
+  const title = it => it.type==='loc' ? it.code : it.type==='link' ? (it.name || '(이름 없음)') : it.pn;
   $('listWrap').innerHTML = items.length ? '<div class="list">' + items.map((it,i)=>
-    `<div class="it"><b>${esc(it.type==='loc'?it.code:it.pn)}</b><span>${esc(desc(it))}</span><button type="button" data-delete-index="${i}">삭제</button></div>`
+    `<div class="it"><b>${esc(title(it))}</b><span>${esc(desc(it))}</span><button type="button" data-delete-index="${i}">삭제</button></div>`
   ).join('') + '</div>' : '<div class="empty">왼쪽에서 정보를 입력하고 <b>목록에 추가</b>를 누르세요.</div>';
 
   const a4 = $('paper').value==='a4';
@@ -324,14 +369,16 @@ function qrDiag(){
   if(!sample){ el.textContent=''; return; }
   const data = qrData(sample);
   const urlMode = $('qmode').value === 'url' && sample.type !== 'bolt';
-  const advice = urlMode ? '기준 URL을 짧게 하세요' : 'QR 칸이 좁습니다 — 라벨 종류를 확인하세요';
+  /* 링크 라벨은 QR 데이터가 곧 주소라 칸을 넓혀도 한계가 있다 — 줄일 대상을 정확히 짚어준다 */
+  const advice = sample.type === 'link' ? '링크 주소를 줄이세요 (사내 단축주소 권장)'
+    : urlMode ? '기준 URL을 짧게 하세요' : 'QR 칸이 좁습니다 — 라벨 종류를 확인하세요';
   let q;
   try{ q = makeQrCode(data, $('ecc').value); }
   catch(error){
     el.innerHTML = `<b style="color:#b32020">QR 생성 실패</b> — 데이터가 ${data.length}자로 너무 깁니다. ${advice}.`;
     return;
   }
-  const quietZone = sample.type === 'loc' ? 4 : 2;
+  const quietZone = (sample.type === 'loc' || sample.type === 'link') ? 4 : 2;
   const modules = q.getModuleCount();
   const mm = qrPrintSide(sample.type) / (modules + quietZone*2);
   const grade = mm>=0.37 ? ['양호','#127a3d'] : mm>=0.30 ? ['주의 – 스캔 거리·조명 확인','#a86a00'] : ['위험','#b32020'];
@@ -353,6 +400,7 @@ function applyStyles(grid){
      .matmode{--qr-w:${MAT_LAYOUT.qrW}mm;--rev-w:${MAT_LAYOUT.revW}mm}
      .boltmode{--qr-w:${BOLT_LAYOUT.qrW}mm;--grade-w:${BOLT_LAYOUT.gradeW}mm;
        --top-w:${BOLT_LAYOUT.topW}mm;--side-w:${mmv(BOLT_LAYOUT.sideW + FC_PAD*2)}mm}
+     .linkmode{--link-qr:${LINK_QR}mm}
      .pw,.cell{width:${W}mm;height:${H}mm;overflow:hidden}
      ${a4?`.sheet{transform:translate(${num('dx')}mm,${num('dy')}mm)}`:''}`;
   css += a4

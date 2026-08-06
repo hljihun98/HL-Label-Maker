@@ -184,6 +184,24 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 .lm-logo img{height:5mm;width:37.8mm;display:block;color:#000}
 .lm-foot .t{font-size:calc(2.4mm * var(--fs,1));font-weight:700;letter-spacing:.06em}
 
+/* 링크 라벨 — 로케이션 라벨과 같은 골격. 다른 점은 QR 을 키운 것뿐이다.
+   주소는 로케이션 코드보다 데이터가 길어 모듈이 촘촘해지므로 같은 34mm 로는
+   셀이 작아져 인식이 나빠진다.
+   제목·설명 칸은 다른 라벨과 같이 흰 바탕에 괘선만 두른다 — 유포지 레이저 인쇄에서
+   이 면적을 solid black 으로 채우면 토너가 번져 글자가 뭉갠다. 위계는 글자 크기로 준다. */
+.lk-qr{width:var(--link-qr,40mm);height:var(--link-qr,40mm);flex:0 0 var(--link-qr,40mm);
+  border:var(--bw,.35mm) solid #000;padding:.2mm}
+.lk-qr svg{width:100%;height:100%;shape-rendering:crispEdges;display:block}
+.lk-txt{flex:1;min-width:0;height:var(--link-qr,40mm);display:flex;flex-direction:column;gap:1.6mm}
+.lk-box{border:var(--bw,.35mm) solid #000;display:flex;align-items:center;justify-content:center;
+  padding:1mm 1.6mm;text-align:center;overflow:hidden;min-width:0}
+.lk-name{flex:1.35;font-weight:800;letter-spacing:-.01em}
+.lk-desc{flex:1;font-weight:700}
+.lk-box .ml{display:block;line-height:1.12}
+/* LINK 태그만 반전 — 면적이 작아 번지지 않고, 라벨 종류를 한눈에 가르는 표식이다 */
+.lk-tag{background:#000;color:#fff;font-weight:800;letter-spacing:.08em;
+  font-size:calc(2.6mm * var(--fs,1));line-height:1;padding:1mm 2.4mm}
+
 /* 인쇄 */
 @media print{
   .side,.bar,.no-print{display:none!important}
