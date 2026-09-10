@@ -1,5 +1,5 @@
 const MAX_LABELS = 400;      // 브라우저가 감당하는 현실적 상한 (QR·바코드가 라벨마다 들어감)
-const PREVIEW_MAX = 50;      // 미리보기는 앞부분만 — 수백 장을 화면에 그리면 느려진다
+const PREVIEW_MAX = 100;     // 미리보기는 앞부분만 — 수백 장을 화면에 그리면 느려진다
 
 function roomLeft(){ return MAX_LABELS - items.length; }
 function capWarn(want){
@@ -568,8 +568,11 @@ const wait = seconds => new Promise(resolve => setTimeout(resolve, Math.max(0, s
 /* 프린터가 급지를 못 따라오면 라벨이 밀린다. 프린터의 인쇄 속도 자체는 드라이버 설정이라
    웹페이지가 바꿀 수 없지만, 한 번에 보내는 양은 나눌 수 있다 — 묶음 사이에 프린터가
    용지 위치를 다시 잡는다. 0이면 지금까지처럼 한 번에 보낸다. */
+let printing = false;
 async function doPrint(){
   if(!items.length){ alert('인쇄할 라벨이 없습니다. 정보를 입력하고 [목록에 추가]를 누르세요.'); return; }
+  if(printing) return;                    // 두 번 눌러도 묶음이 겹쳐 나가지 않게
+  printing = true;
   const size = Math.max(0, Math.min(MAX_LABELS, parseInt($('batch').value) || 0));
   const gap = Math.max(0, Number.parseFloat($('batchWait').value) || 0);
   const all = items;
@@ -589,6 +592,7 @@ async function doPrint(){
     }
   } finally {
     items = all;
+    printing = false;
     renderAll();
   }
 }
@@ -631,14 +635,20 @@ function renderAll(full){
   const a4 = $('paper').value==='a4';
   const grid = a4 ? sheetGrid() : null;
   const prev = $('prev');
+  /* 미리보기에서 바로 지울 수 있게 삭제 버튼을 라벨 밖(칸)에 얹는다 — 라벨 안에 넣으면
+     인쇄에 섞이고 칸 계산도 흔들린다. .no-print 라 인쇄에는 나오지 않는다.
+     data-delete-index 는 목록 전체 기준 번호여야 한다(A4 는 장마다 칸이 다시 세어진다). */
+  const cellHtml = (it, index) => `<button type="button" class="lbl-del no-print"`
+    + ` title="이 라벨을 목록에서 삭제" aria-label="이 라벨을 목록에서 삭제"`
+    + ` data-delete-index="${index}">✕</button>${labelOf(it)}`;
   if(a4){
     const per = grid.per, pages = [];
     for(let i=0;i<shown.length;i+=per) pages.push(shown.slice(i,i+per));
-    prev.innerHTML = pages.map(p=>`<div class="sheet">${p.map(it=>
-      `<div class="cell">${labelOf(it)}</div>`).join('')}</div>`).join('') || '';
+    prev.innerHTML = pages.map((page, at)=>`<div class="sheet">${page.map((it, cell)=>
+      `<div class="cell">${cellHtml(it, at*per + cell)}</div>`).join('')}</div>`).join('') || '';
     prev.style.display = 'block';
   } else {
-    prev.innerHTML = shown.map(it=>`<div class="pw">${labelOf(it)}</div>`).join('');
+    prev.innerHTML = shown.map((it, index)=>`<div class="pw">${cellHtml(it, index)}</div>`).join('');
     prev.style.display = 'flex';
   }
   applyStyles(grid);
@@ -788,12 +798,17 @@ function printCalib(){
   w.document.close();
 }
 
-$('listWrap').addEventListener('click', event => {
+/* 목록과 미리보기가 같은 삭제 규칙을 쓴다 — 번호는 둘 다 목록 전체 기준이다 */
+function onDeleteClick(event){
   const button = event.target.closest('[data-delete-index]');
   if(!button) return;
+  /* 인쇄 중에는 화면에 묶음만 그려져 있어 번호가 목록과 어긋난다 — 그때는 받지 않는다 */
+  if(printing) return;
   const index = Number.parseInt(button.dataset.deleteIndex, 10);
   if(Number.isInteger(index) && index >= 0 && index < items.length) del(index);
-});
+}
+$('listWrap').addEventListener('click', onDeleteClick);
+$('prev').addEventListener('click', onDeleteClick);
 
 /* 시작 — 샘플 라벨을 자동으로 넣지 않는다. 모르고 인쇄하면 실물 없는 박스 ID가 발행된다. */
 applyCalDefaults();

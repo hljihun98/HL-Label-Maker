@@ -65,8 +65,18 @@ const xmlAttr = (tag, name) => {
   const found = new RegExp(`\\s${name.replace(':', '\\:')}="([^"]*)"`).exec(tag);
   return found ? found[1] : '';
 };
-const xmlTexts = fragment => [...fragment.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
-  .map(match => xmlText(match[1])).join('');
+/* 태그 이름 앞에 이름공간 접두어가 붙은 파일도 있다(<x:row>, <x:c>) — 엑셀은 안 붙이지만
+   다른 시스템이 내보낸 파일에서는 흔하다. 접두어를 못 읽으면 시트가 통째로 빈 것으로 보인다.
+   matchAll 은 정규식을 복제해 쓰므로 전역 정규식을 이렇게 공유해도 lastIndex 가 엉키지 않는다. */
+const NS = '(?:[A-Za-z0-9]+:)?';
+const RE_TEXT  = new RegExp(`<${NS}t\\b[^>]*>([\\s\\S]*?)</${NS}t>`, 'g');
+const RE_ITEM  = new RegExp(`<${NS}si>([\\s\\S]*?)</${NS}si>|<${NS}si\\s*/>`, 'g');
+const RE_PHON  = new RegExp(`<${NS}rPh[\\s\\S]*?</${NS}rPh>`, 'g');
+const RE_ROW   = new RegExp(`<${NS}row\\b[^>]*>([\\s\\S]*?)</${NS}row>`, 'g');
+const RE_CELL  = new RegExp(`<${NS}c\\b([^>]*?)(?:/>|>([\\s\\S]*?)</${NS}c>)`, 'g');
+const RE_VALUE = new RegExp(`<${NS}v>([\\s\\S]*?)</${NS}v>`);
+const RE_SHEET = new RegExp(`<${NS}sheet\\b[^>]*>`);
+const xmlTexts = fragment => [...fragment.matchAll(RE_TEXT)].map(match => xmlText(match[1])).join('');
 /* "AB12" → 27 (0부터). 빈 칸은 <c> 자체가 없으므로 이 번호로 자리를 맞춘다 */
 function colIndex(ref){
   let index = 0;
@@ -78,21 +88,21 @@ function colIndex(ref){
    후리가나(rPh)도 <t> 를 갖고 있어 먼저 걷어낸다. 서식이 섞인 글자는 <r><t> 여러 개로 쪼개져 있다. */
 function sharedStrings(xml){
   if(!xml) return [];
-  return [...xml.replace(/<rPh[\s\S]*?<\/rPh>/g, '').matchAll(/<si>([\s\S]*?)<\/si>|<si\s*\/>/g)]
+  return [...xml.replace(RE_PHON, '').matchAll(RE_ITEM)]
     .map(match => match[1] ? xmlTexts(match[1]) : '');
 }
 
 function sheetRows(xml, strings){
   const rows = [];
-  for(const row of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)){
+  for(const row of xml.matchAll(RE_ROW)){
     const cells = [];
-    for(const cell of row[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){
+    for(const cell of row[1].matchAll(RE_CELL)){
       const tag = cell[1], inner = cell[2] || '', type = xmlAttr(tag, 't');
       let value = '';
       if(type === 'inlineStr'){
         value = xmlTexts(inner);
       } else {
-        const raw = /<v>([\s\S]*?)<\/v>/.exec(inner);
+        const raw = RE_VALUE.exec(inner);
         const text = raw ? xmlText(raw[1]) : '';
         value = type === 's' ? (strings[Number(text)] ?? '') : text;
       }
@@ -107,10 +117,12 @@ function sheetRows(xml, strings){
 /* 첫 번째 시트 — 워크북에 적힌 순서가 곧 엑셀 탭 순서다. 파일 이름(sheet1.xml)은 순서와
    무관할 수 있으므로 관계 파일(rels)을 따라간다. */
 function firstSheetPath(entries, workbookXml, relsXml){
-  const sheet = /<sheet\b[^>]*>/.exec(workbookXml || '');
+  const sheet = RE_SHEET.exec(workbookXml || '');
   const id = sheet ? xmlAttr(sheet[0], 'r:id') : '';
   if(id && relsXml){
-    const rel = new RegExp(`<Relationship\\b[^>]*\\sId="${id}"[^>]*>`).exec(relsXml);
+    /* id 는 파일에서 온 값이라 정규식 기호가 섞여 있으면 패턴이 깨진다 */
+    const safeId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rel = new RegExp(`<${NS}Relationship\\b[^>]*\\sId="${safeId}"[^>]*>`).exec(relsXml);
     let target = rel ? xmlAttr(rel[0], 'Target') : '';
     if(target){
       target = target.replace(/^\//, '').replace(/^\.\.\//, '');
