@@ -98,49 +98,68 @@ function addImageFile(name, url){
 const IMG_MAX_EDGE = 700;
 const IMG_PNG_MAX = 500 * 1024;
 const IMG_RAW_MAX = 3 * 1024 * 1024;
-/* 원본을 인쇄 크기에 맞게 줄인다. 줄이는 것은 인쇄 성능을 위한 것이지 화면에 띄우는 데 꼭
-   필요한 일이 아니므로, 캔버스를 못 쓰는 환경(브라우저 제한·보안 정책)에서는 원본을 그대로
-   쓴다 — 그림이 아예 안 나오는 것보다 낫다. 다만 원본이 크면 수백 장 인쇄에서 버티지 못한다. */
-function shrinkToDataUrl(image, original){
-  try{
-    const ratio = Math.min(1, IMG_MAX_EDGE / Math.max(image.width, image.height));
-    const canvas = document.createElement('canvas');
-    canvas.width  = Math.max(1, Math.round(image.width * ratio));
-    canvas.height = Math.max(1, Math.round(image.height * ratio));
-    const ctx = canvas.getContext('2d');
-    if(!ctx) throw new Error('canvas 를 쓸 수 없습니다.');
-    /* 투명 배경을 흰색으로 깔아둔다 — 라벨은 흰 유포지에 흑백 1색으로 인쇄된다 */
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const png = canvas.toDataURL('image/png');
-    return png.length <= IMG_PNG_MAX ? png : canvas.toDataURL('image/jpeg', 0.92);
-  }catch(error){
-    if(String(original || '').length > IMG_RAW_MAX)
-      throw new Error('이미지를 줄이지 못했고 원본이 너무 큽니다 — 캡처를 작게 잘라 주세요.');
-    return original;
-  }
+/* 원본을 인쇄 크기에 맞게 줄인다 — 실패하면 던진다(부르는 쪽이 원본으로 되돌린다).
+   줄이는 것은 400장 인쇄를 위한 것이지 그림을 띄우는 데 꼭 필요한 일은 아니다. */
+function shrinkToDataUrl(image){
+  const ratio = Math.min(1, IMG_MAX_EDGE / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width  = Math.max(1, Math.round(image.width * ratio));
+  canvas.height = Math.max(1, Math.round(image.height * ratio));
+  const ctx = canvas.getContext('2d');
+  if(!ctx) throw new Error('canvas 를 쓸 수 없습니다.');
+  /* 투명 배경을 흰색으로 깔아둔다 — 라벨은 흰 유포지에 흑백 1색으로 인쇄된다 */
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const png = canvas.toDataURL('image/png');
+  return png.length <= IMG_PNG_MAX ? png : canvas.toDataURL('image/jpeg', 0.92);
 }
-function fileToDataUrl(file){
+/* 윈도우가 파일 형식을 비워서 넘기는 경우가 있다(확장자 연결이 깨진 PC 에서 흔하다).
+   그대로 데이터 URL 을 만들면 data:application/octet-stream 이 되고, 그러면 확장자가 .png 라도
+   <img> 가 "이미지가 아니다"라며 거부한다. 그래서 형식이 비면 확장자로 채워 넣는다. */
+const IMG_TYPE_BY_EXT = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+  gif:'image/gif', webp:'image/webp', bmp:'image/bmp' };
+function imageBlob(file){
+  if(/^image\//.test(file.type)) return file;
+  const ext = String(file.name || '').split('.').pop().toLowerCase();
+  return new Blob([file], { type: IMG_TYPE_BY_EXT[ext] || 'image/png' });
+}
+/* 실패했을 때 무엇이 문제였는지 알 수 있게 브라우저가 본 형식·크기를 함께 남긴다 */
+const fileNote = file => `(형식 ${file.type || '없음'} · ${Math.round((file.size || 0)/1024)}KB)`;
+function loadImage(blob, file){
+  return new Promise((resolve, reject) => {
+    /* 데이터 URL 대신 objectURL 로 디코딩한다 — 파일을 통째로 base64 로 부풀리지 않고,
+       선언된 형식이 이상해도 blob 의 형식을 우리가 정해 줄 수 있다. */
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    const done = fn => (...args) => { URL.revokeObjectURL(url); fn(...args); };
+    image.onload = done(() => resolve(image));
+    image.onerror = done(() => reject(new Error(`${file.name} 을(를) 이미지로 열지 못했습니다 ${fileNote(file)}.`)));
+    image.src = url;
+  });
+}
+function blobToDataUrl(blob, file){
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`${file.name} 을(를) 읽을 수 없습니다.`));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error(`${file.name} 은(는) 이미지가 아닙니다.`));
-      /* onload 안에서 던진 예외는 아무도 받지 못해 Promise 가 영영 안 끝난다
-         (폴더 읽기가 "읽는 중…"에서 멈추고, 수동 첨부는 버튼이 죽은 것처럼 보인다).
-         그래서 이 안에서 직접 거둬 reject 로 넘긴다. */
-      image.onload = () => {
-        try{
-          if(!image.width || !image.height) throw new Error(`${file.name} 의 크기를 읽지 못했습니다.`);
-          resolve(shrinkToDataUrl(image, reader.result));
-        }catch(error){ reject(error); }
-      };
-      image.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+    reader.onerror = () => reject(new Error(`${file.name} 을(를) 읽을 수 없습니다 ${fileNote(file)}.`));
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
   });
+}
+async function fileToDataUrl(file){
+  const blob = imageBlob(file);
+  const image = await loadImage(blob, file);
+  if(!image.width || !image.height)
+    throw new Error(`${file.name} 의 크기를 읽지 못했습니다 ${fileNote(file)}.`);
+  try{
+    return shrinkToDataUrl(image);
+  }catch(error){
+    /* 캔버스를 못 쓰는 환경 — 줄이지 못할 뿐이므로 원본을 그대로 담는다 */
+    const raw = await blobToDataUrl(blob, file);
+    if(raw.length > IMG_RAW_MAX)
+      throw new Error(`${file.name} 을(를) 줄이지 못했고 원본이 너무 큽니다 — 캡처를 작게 잘라 주세요.`);
+    return raw;
+  }
 }
 let matImageDataUrl = '';          // 수동 첨부 — 다음 [목록에 추가] 부터 라벨에 붙는다
 function renderMatImgPreview(name){
