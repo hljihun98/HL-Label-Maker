@@ -97,6 +97,30 @@ function addImageFile(name, url){
    사진처럼 커지는 경우에만 JPEG 로 떨어뜨린다. */
 const IMG_MAX_EDGE = 700;
 const IMG_PNG_MAX = 500 * 1024;
+const IMG_RAW_MAX = 3 * 1024 * 1024;
+/* 원본을 인쇄 크기에 맞게 줄인다. 줄이는 것은 인쇄 성능을 위한 것이지 화면에 띄우는 데 꼭
+   필요한 일이 아니므로, 캔버스를 못 쓰는 환경(브라우저 제한·보안 정책)에서는 원본을 그대로
+   쓴다 — 그림이 아예 안 나오는 것보다 낫다. 다만 원본이 크면 수백 장 인쇄에서 버티지 못한다. */
+function shrinkToDataUrl(image, original){
+  try{
+    const ratio = Math.min(1, IMG_MAX_EDGE / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.max(1, Math.round(image.width * ratio));
+    canvas.height = Math.max(1, Math.round(image.height * ratio));
+    const ctx = canvas.getContext('2d');
+    if(!ctx) throw new Error('canvas 를 쓸 수 없습니다.');
+    /* 투명 배경을 흰색으로 깔아둔다 — 라벨은 흰 유포지에 흑백 1색으로 인쇄된다 */
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const png = canvas.toDataURL('image/png');
+    return png.length <= IMG_PNG_MAX ? png : canvas.toDataURL('image/jpeg', 0.92);
+  }catch(error){
+    if(String(original || '').length > IMG_RAW_MAX)
+      throw new Error('이미지를 줄이지 못했고 원본이 너무 큽니다 — 캡처를 작게 잘라 주세요.');
+    return original;
+  }
+}
 function fileToDataUrl(file){
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -110,18 +134,7 @@ function fileToDataUrl(file){
       image.onload = () => {
         try{
           if(!image.width || !image.height) throw new Error(`${file.name} 의 크기를 읽지 못했습니다.`);
-          const ratio = Math.min(1, IMG_MAX_EDGE / Math.max(image.width, image.height));
-          const canvas = document.createElement('canvas');
-          canvas.width  = Math.max(1, Math.round(image.width * ratio));
-          canvas.height = Math.max(1, Math.round(image.height * ratio));
-          const ctx = canvas.getContext('2d');
-          if(!ctx) throw new Error('이미지를 변환할 수 없습니다 (canvas 사용 불가).');
-          /* 투명 배경을 흰색으로 깔아둔다 — 라벨은 흰 유포지에 흑백 1색으로 인쇄된다 */
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          const png = canvas.toDataURL('image/png');
-          resolve(png.length <= IMG_PNG_MAX ? png : canvas.toDataURL('image/jpeg', 0.92));
+          resolve(shrinkToDataUrl(image, reader.result));
         }catch(error){ reject(error); }
       };
       image.src = reader.result;
@@ -156,16 +169,15 @@ async function onImageFolderPicked(event){
   const files = [...input.files]
     .filter(file => /^image\//.test(file.type) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name))
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'));       // 같은 품번이 둘이면 결과가 매번 같게
-  input.value = '';                        // 같은 폴더를 다시 골라도 change 가 뜨도록
   const info = $('imgFolderInfo');
-  if(!files.length){ info.textContent = '이미지 파일을 찾지 못했습니다.'; return; }
+  if(!files.length){ info.textContent = '이미지 파일을 찾지 못했습니다.'; input.value = ''; return; }
   if(folderLoading){ info.textContent = '앞서 고른 폴더를 아직 읽는 중입니다. 끝난 뒤 다시 눌러주세요.'; return; }
   folderLoading = true;
   /* 폴더를 새로 고르면 이전 폴더의 매칭은 버린다 — 폴더에서 지운 파일이 남아 있으면
      라벨에 없는 개략도가 인쇄된다. 관리대장에서 읽은 파일명은 표에서 온 값이라 남긴다. */
   imageByPn.clear();
   imageByName.clear();
-  let loaded = 0, failed = 0;
+  let loaded = 0, failed = 0, firstError = '';
   /* 한꺼번에 다 읽으면 원본(수 MB×장수)이 동시에 메모리에 올라와 탭이 멈춘다 — 조금씩 끊어 읽는다 */
   const LOAD_AT_ONCE = 4;
   try{
@@ -175,18 +187,29 @@ async function onImageFolderPicked(event){
       await Promise.all(chunk.map(async file => {
         let url;
         try{ url = await fileToDataUrl(file); }
-        catch(error){ failed++; console.warn(error.message); return; }   // 깨진 파일 한 장이 폴더를 막지 않는다
+        catch(error){                                     // 깨진 파일 한 장이 폴더를 막지 않는다
+          failed++;
+          if(!firstError) firstError = error.message;     // 왜 실패했는지 화면에도 남긴다
+          console.warn(error.message);
+          return;
+        }
         loaded++;
         addImageFile(file.name, url);
       }));
     }
-  } finally { folderLoading = false; }
+  } finally {
+    folderLoading = false;
+    /* 파일을 다 읽은 뒤에 비운다 — 읽기 전에 비우면 브라우저가 방금 고른 파일 목록을 놓아버려
+       한 장도 못 읽는다. 비우는 목적은 같은 폴더를 다시 골라도 change 가 뜨게 하는 것뿐이다. */
+    input.value = '';
+  }
   const matched = items.filter(it => it.form === 'img' && imageFor(it)).length;
+  const why = firstError ? ` — 첫 실패 사유: ${esc(firstError)}` : '';
   info.innerHTML = loaded
     ? `이미지 <b>${loaded}개</b> 불러왔습니다`
-      + (failed ? ` · <b>${failed}개는 읽지 못했습니다</b>` : '')
+      + (failed ? ` · <b>${failed}개는 읽지 못했습니다</b>${why}` : '')
       + (items.length ? ` · 지금 목록에서 <b>${matched}/${items.length}장</b>에 붙었습니다.` : '.')
-    : `<b style="color:#b32020">이미지를 하나도 읽지 못했습니다</b> (${failed}개 실패).`;
+    : `<b style="color:#b32020">이미지를 하나도 읽지 못했습니다</b> (${failed}개 실패)${why}`;
   renderAll();
 }
 
