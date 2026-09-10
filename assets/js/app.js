@@ -58,6 +58,138 @@ function nextBox(seq){
 }
 const startSeq = () => Math.max(1, parseInt($('bs').value)||1);
 
+/* ---------- 제품 개략도 이미지 ----------
+   서버가 없으므로 로컬 파일을 브라우저에서 읽어 데이터 URL 로 라벨에 직접 넣는다.
+   매칭을 두 갈래로 걸어 스크린샷 파일 이름을 바꾸지 않아도 되게 한다:
+     ① 파일명이 "품번_스크린샷 ….png" 형태면 선두 토큰(품번)으로
+     ② 관리대장의 [제품개략도 파일명] 열과 파일명이 같으면 (원본 이름 그대로인 폴더)
+   조회 키가 품번이므로 같은 품번의 박스 라벨 수백 장이 데이터 URL 문자열 하나를 공유한다. */
+const imageByPn = new Map();       // 정규화 품번 → 데이터 URL (파일명에 품번이 붙은 경우)
+const imageByName = new Map();     // 파일명(소문자) → 데이터 URL
+const imageNameByPn = new Map();   // 정규화 품번 → 관리대장에 적힌 개략도 파일명
+const normPn = value => String(value || '').trim().toUpperCase();
+function imageFor(it){
+  if(it.img) return it.img;                                   // 수동 첨부가 폴더 매칭보다 우선
+  const key = normPn(it.pn);
+  /* 관리대장이 파일명을 지정했다면 그것이 먼저다 — 표에 적힌 짝은 사람이 정한 값이고,
+     파일명 접두어 매칭은 이름 규칙에서 유추한 값이다. */
+  const named = imageNameByPn.get(key);
+  const byName = named && imageByName.get(named.trim().toLowerCase());
+  return byName || imageByPn.get(key) || '';
+}
+/* 파일 하나를 두세 가지 키로 걸어 둔다 — 이름 그대로, "품번_" 접두어를 뗀 나머지, 확장자 뺀 전체.
+   관리대장에는 접두어 없는 원본 이름이 적혀 있어서, 파일을 정리해 이름을 바꾼 폴더도 매칭된다.
+   먼저 들어온 파일이 이긴다 — 파일을 이름순으로 처리하므로 결과가 매번 같다. */
+function addImageFile(name, url){
+  const put = (map, key) => { if(key && !map.has(key)) map.set(key, url); };
+  const stem = name.replace(/\.[^.]+$/, '');
+  put(imageByName, name.trim().toLowerCase());
+  const cut = stem.indexOf('_');
+  if(cut > 0){
+    put(imageByPn, normPn(stem.slice(0, cut)));
+    put(imageByName, name.slice(cut + 1).trim().toLowerCase());   // 접두어를 뗀 원본 파일명
+  }
+  put(imageByPn, normPn(stem));                                   // 파일명이 품번 그 자체인 경우
+}
+/* 인쇄 칸이 34mm(300dpi ≈ 400px)라 원본 스크린샷(수 MB)을 그대로 담을 이유가 없다.
+   400장을 한 번에 그리고 인쇄해야 하므로 긴 변 700px 로 줄여 담는다.
+   개략도는 선과 글자로 된 그림이라 JPEG 로 뭉개면 얇은 선이 번진다 — PNG 를 먼저 쓰고,
+   사진처럼 커지는 경우에만 JPEG 로 떨어뜨린다. */
+const IMG_MAX_EDGE = 700;
+const IMG_PNG_MAX = 500 * 1024;
+function fileToDataUrl(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`${file.name} 을(를) 읽을 수 없습니다.`));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error(`${file.name} 은(는) 이미지가 아닙니다.`));
+      /* onload 안에서 던진 예외는 아무도 받지 못해 Promise 가 영영 안 끝난다
+         (폴더 읽기가 "읽는 중…"에서 멈추고, 수동 첨부는 버튼이 죽은 것처럼 보인다).
+         그래서 이 안에서 직접 거둬 reject 로 넘긴다. */
+      image.onload = () => {
+        try{
+          if(!image.width || !image.height) throw new Error(`${file.name} 의 크기를 읽지 못했습니다.`);
+          const ratio = Math.min(1, IMG_MAX_EDGE / Math.max(image.width, image.height));
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.max(1, Math.round(image.width * ratio));
+          canvas.height = Math.max(1, Math.round(image.height * ratio));
+          const ctx = canvas.getContext('2d');
+          if(!ctx) throw new Error('이미지를 변환할 수 없습니다 (canvas 사용 불가).');
+          /* 투명 배경을 흰색으로 깔아둔다 — 라벨은 흰 유포지에 흑백 1색으로 인쇄된다 */
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const png = canvas.toDataURL('image/png');
+          resolve(png.length <= IMG_PNG_MAX ? png : canvas.toDataURL('image/jpeg', 0.92));
+        }catch(error){ reject(error); }
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+let matImageDataUrl = '';          // 수동 첨부 — 다음 [목록에 추가] 부터 라벨에 붙는다
+function renderMatImgPreview(name){
+  $('matImgPreview').innerHTML = matImageDataUrl
+    ? `<img src="${matImageDataUrl}" alt=""><span>${esc(name || '첨부됨')}</span>`
+      + '<button type="button" onclick="clearMatImage()">제거</button>'
+    : '';
+}
+function clearMatImage(){
+  matImageDataUrl = '';
+  $('matImg').value = '';
+  renderMatImgPreview();
+}
+async function onMatImagePicked(event){
+  const file = event.target.files[0];
+  if(!file){ clearMatImage(); return; }
+  try{ matImageDataUrl = await fileToDataUrl(file); }
+  catch(error){ matImageDataUrl = ''; alert(error.message); }
+  event.target.value = '';                 // 같은 파일을 고쳐 저장한 뒤 다시 골라도 반영되도록
+  renderMatImgPreview(file.name);
+}
+/* 폴더는 붙여넣기 전·후 아무 때나 불러도 된다 — imageFor() 가 그릴 때 조회하므로 순서가 무관하다 */
+let folderLoading = false;
+async function onImageFolderPicked(event){
+  const input = event.target;
+  const files = [...input.files]
+    .filter(file => /^image\//.test(file.type) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(file.name))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));       // 같은 품번이 둘이면 결과가 매번 같게
+  input.value = '';                        // 같은 폴더를 다시 골라도 change 가 뜨도록
+  const info = $('imgFolderInfo');
+  if(!files.length){ info.textContent = '이미지 파일을 찾지 못했습니다.'; return; }
+  if(folderLoading){ info.textContent = '앞서 고른 폴더를 아직 읽는 중입니다. 끝난 뒤 다시 눌러주세요.'; return; }
+  folderLoading = true;
+  /* 폴더를 새로 고르면 이전 폴더의 매칭은 버린다 — 폴더에서 지운 파일이 남아 있으면
+     라벨에 없는 개략도가 인쇄된다. 관리대장에서 읽은 파일명은 표에서 온 값이라 남긴다. */
+  imageByPn.clear();
+  imageByName.clear();
+  let loaded = 0, failed = 0;
+  /* 한꺼번에 다 읽으면 원본(수 MB×장수)이 동시에 메모리에 올라와 탭이 멈춘다 — 조금씩 끊어 읽는다 */
+  const LOAD_AT_ONCE = 4;
+  try{
+    for(let i = 0; i < files.length; i += LOAD_AT_ONCE){
+      const chunk = files.slice(i, i + LOAD_AT_ONCE);
+      info.textContent = `이미지 ${i}/${files.length}개 읽는 중…`;
+      await Promise.all(chunk.map(async file => {
+        let url;
+        try{ url = await fileToDataUrl(file); }
+        catch(error){ failed++; console.warn(error.message); return; }   // 깨진 파일 한 장이 폴더를 막지 않는다
+        loaded++;
+        addImageFile(file.name, url);
+      }));
+    }
+  } finally { folderLoading = false; }
+  const matched = items.filter(it => it.form === 'img' && imageFor(it)).length;
+  info.innerHTML = loaded
+    ? `이미지 <b>${loaded}개</b> 불러왔습니다`
+      + (failed ? ` · <b>${failed}개는 읽지 못했습니다</b>` : '')
+      + (items.length ? ` · 지금 목록에서 <b>${matched}/${items.length}장</b>에 붙었습니다.` : '.')
+    : `<b style="color:#b32020">이미지를 하나도 읽지 못했습니다</b> (${failed}개 실패).`;
+  renderAll();
+}
+
 /* ---------- 목록 ---------- */
 /* 주소에 스킴이 없으면 붙인다 — "intra/check" 만 적힌 QR 은 휴대폰 카메라가
    링크로 인식하지 못해 라벨이 통째로 무용지물이 된다. */
@@ -158,11 +290,15 @@ function addLabels(){
   if(!$('pn').value.trim()){ alert('품번을 입력하세요.'); return; }
   const n = capWarn(Math.max(1, parseInt($('bn').value)||1));
   if(!n) return;
+  /* 이미지 종류도 type 은 'mat' 이다 — form 하위 필드로만 가른다(워셔와 같은 방식).
+     새 type 을 만들면 QR 진단·CSS 변수 주입·목록 요약에 분기가 전부 늘어난다. */
+  const imgMode = $('mode').value === 'matimg';
   let seq = startSeq();
   for(let i=0;i<n;i++,seq++){
     items.push({type:'mat',pn:$('pn').value.trim(),rev:$('rev').value.trim(),nm:$('nm').value.trim(),
       pj:$('pj').value.trim(),qty:$('qty').value.trim(),unit:$('unit').value,
-      vd:$('vd').value.trim(),dt:$('dt').value,loc:$('loc').value.trim(),box:nextBox(seq)});
+      vd:$('vd').value.trim(),dt:$('dt').value,loc:$('loc').value.trim(),box:nextBox(seq),
+      ...(imgMode ? { form:'img', ...(matImageDataUrl ? { img:matImageDataUrl } : {}) } : {})});
   }
   commitSeq(seq - 1);
   restoreSeq(seq);
@@ -275,14 +411,41 @@ function importCsv(){
     if(notes.length) alert(notes.join('\n\n'));
     return;
   }
-  // LOT-IMS 재고현황 CSV 헤더 자동 인식 → 품번/리비전/품명/제품군/단위/현재고/안전재고/상태/보관위치
+  /* 붙여넣은 표의 헤더 자동 인식 — 부품 관리대장은 열이 20개가 넘고 앞으로 더 붙을 수 있어
+     위치 기반 매핑이 바로 어긋난다. 그래서 열 번호를 헤더 이름으로 찾는다.
+     LOT-IMS 재고현황 CSV(품번/리비전/품명/제품군/…)는 지금처럼 위치로 읽는다. */
+  const stripBom = value => {
+    const text = String(value ?? '');
+    return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+  };
+  const headerCells = (table[0] || []).map(cell => stripBom(cell).trim());
+  /* 열 이름은 시트마다 조금씩 다르게 적힌다(이름/품명, Product/기종…). 흔한 표기를 함께 받되
+     못 찾은 열은 아래에서 알린다 — 조용히 비우면 품명 없는 라벨이 수백 장 인쇄된다. */
+  const col = (...names) => headerCells.findIndex(h => names.includes(h.replace(/\s+/g, '').toUpperCase()));
+  const ledger = { pn:col('품번','PARTNO','PARTNO.'), rev:col('REVISION','REV','리비전'),
+    nm:col('이름','품명','NAME','DESCRIPTION'), pj:col('PRODUCT','제품','기종','제품군'),
+    qty:col('재고수량','현재고','수량'), loc:col('재고위치','보관위치','로케이션'),
+    vd:col('업체명','협력사'), img:col('제품개략도파일명','개략도파일명') };
   const head = (table[0] || []).join('|').replace(/^\uFEFF/,'');
-  if(/품번/.test(head) && /제품군/.test(head)){
+  if(/제품개략도/.test(head) && ledger.pn >= 0){
+    const at = (cells, index) => index >= 0 ? String(cells[index] ?? '').trim() : '';
+    const missing = [['품명(이름)','nm'], ['기종(Product)','pj'], ['제품개략도 파일명','img']]
+      .filter(([, key]) => ledger[key] < 0).map(([label]) => label);
+    if(missing.length) alert(`관리대장에서 다음 열을 찾지 못해 비워 둡니다 — 헤더 이름을 확인하세요.\n\n${missing.join('\n')}`);
+    table = table.slice(1).map(c=>{
+      const pn = at(c, ledger.pn), imgName = at(c, ledger.img);
+      /* 개략도 파일명을 기억해 두면 스크린샷을 원본 이름 그대로 둔 폴더에서도 매칭된다 */
+      if(pn && imgName) imageNameByPn.set(normPn(pn), imgName);
+      //       품번 Rev              품명             규격 기종(Product)  수량(재고수량)   단위  로케이션(재고위치) 협력사(업체명)  박스수
+      return [pn, at(c, ledger.rev), at(c, ledger.nm), '', at(c, ledger.pj), at(c, ledger.qty), 'EA', at(c, ledger.loc), at(c, ledger.vd), '1'];
+    });
+  } else if(/품번/.test(head) && /제품군/.test(head)){          // LOT-IMS 재고현황 CSV
     table = table.slice(1).map(c=>{
       //       품번   Rev     품명     규격 기종(제품군) 수량(현재고) 단위      로케이션  협력사 박스수
       return [c[0], c[1]||'', c[2]||'', '', c[3]||'', c[5]||'', c[4]||'EA', c[8]||'', '', '1'];
     });
   }
+  const imgMode = $('mode').value === 'matimg';
   let seq = startSeq();
   let stop = false;
   table.forEach(c=>{
@@ -295,7 +458,8 @@ function importCsv(){
     for(let i=0;i<n;i++,seq++){
       /* c[3] = 규격 — 라벨에 인쇄하지 않으므로 자리만 지키고 읽지 않는다 */
       items.push({type:'mat',pn:c[0],rev:c[1]||'',nm:c[2]||'',pj:c[4]||'',qty:c[5]||'',
-        unit:c[6]||'EA',loc:c[7]||'',vd:c[8]||'',dt:$('dt').value,box:nextBox(seq)});
+        unit:c[6]||'EA',loc:c[7]||'',vd:c[8]||'',dt:$('dt').value,box:nextBox(seq),
+        ...(imgMode ? {form:'img'} : {})});
     }
   });
   commitSeq(seq - 1);
@@ -303,9 +467,25 @@ function importCsv(){
   $('csv').value=''; renderAll();
   if(stop) alert(`목록 상한(${MAX_LABELS}장)에 도달해 일부만 추가했습니다.`);
 }
-function doPrint(){
+/* 이미지 라벨에는 <img> 가 붙는다 — QR·바코드 SVG 와 달리 그림은 붙자마자 그려지지 않으므로,
+   그리는 즉시 인쇄하면 아직 안 올라온 칸이 빈 채로 찍힌다. 그래서 인쇄 전에 기다린다.
+   한 장이라도 영영 안 올라오면 인쇄 자체가 막히므로 상한을 둔다. */
+function whenImagesReady(root, timeoutMs = 15000){
+  const pending = [...root.querySelectorAll('img')].filter(img => !img.complete);
+  if(!pending.length) return Promise.resolve();
+  const settle = img => new Promise(resolve => {
+    img.addEventListener('load', resolve, { once:true });
+    img.addEventListener('error', resolve, { once:true });
+  });
+  return Promise.race([
+    Promise.all(pending.map(settle)),
+    new Promise(resolve => setTimeout(resolve, timeoutMs))
+  ]);
+}
+async function doPrint(){
   if(!items.length){ alert('인쇄할 라벨이 없습니다. 정보를 입력하고 [목록에 추가]를 누르세요.'); return; }
   renderAll(true);                        // 인쇄 직전에만 전체 장수를 그린다
+  await whenImagesReady($('prev'));
   try{ window.print(); } finally { renderAll(); }
 }
 function clearAll(){ items=[]; renderAll(); }
@@ -335,7 +515,9 @@ function renderAll(full){
         return `${WASHER_LABEL[it.kind] || '와셔'} ${it.dia} T${it.thk} · ${it.mat}` + spot;
       return `${HEAD_LABEL[it.head] || it.head} ${it.dia}×${it.len} ${it.grade} · ${it.mat}` + spot;
     }
-    return `${it.nm} · ${it.qty}${it.unit} · ${it.box} · ${it.loc||'로케이션 수기'}`;
+    const mat = `${it.nm} · ${it.qty}${it.unit} · ${it.box} · ${it.loc||'로케이션 수기'}`;
+    /* 이미지 종류는 매칭 실패를 인쇄 전에 잡아야 한다 — 라벨에도 같은 문구가 찍힌다 */
+    return it.form === 'img' && !imageFor(it) ? `${mat} · 이미지 미첨부` : mat;
   };
   const title = it => it.type==='loc' ? it.code : it.type==='link' ? (it.name || '(이름 없음)') : it.pn;
   $('listWrap').innerHTML = items.length ? '<div class="list">' + items.map((it,i)=>
@@ -364,7 +546,9 @@ function renderAll(full){
    URL형으로 바꾸면 데이터가 3~4배 길어져 모듈 수가 늘고 셀이 급격히 작아지므로 그때 경고가 뜬다. */
 function qrDiag(){
   const mode = $('mode').value;
-  const sample = items.find(item => item.type === mode) || items[0];
+  /* 이미지 종류는 자재 라벨과 같은 type 이므로 표본을 찾을 때 되돌려 준다 */
+  const wantType = mode === 'matimg' ? 'mat' : mode;
+  const sample = items.find(item => item.type === wantType) || items[0];
   const el = $('qrDiag');
   if(!sample){ el.textContent=''; return; }
   const data = qrData(sample);
@@ -397,7 +581,8 @@ function applyStyles(grid){
   let css = `.label{--lw:${W}mm;--lh:${H}mm;--pt:${num('pt')}mm;--pb:${num('pb')}mm;
        --pl:${num('pl')}mm;--pr:${num('pr')}mm;--dx:${dx}mm;--dy:${dy}mm;
        --sc:${(num('sc')||100)/100};--fs:${num('fs')||1};--bw:${num('bw')}mm}
-     .matmode{--qr-w:${MAT_LAYOUT.qrW}mm;--rev-w:${MAT_LAYOUT.revW}mm}
+     .matmode{--qr-w:${MAT_LAYOUT.qrW}mm;--rev-w:${MAT_LAYOUT.revW}mm;
+       --loc-w:${mmv(matBoxW())}mm;--img-w:${mmv(matImgW())}mm}
      .boltmode{--qr-w:${BOLT_LAYOUT.qrW}mm;--grade-w:${BOLT_LAYOUT.gradeW}mm;
        --top-w:${BOLT_LAYOUT.topW}mm;--side-w:${mmv(BOLT_LAYOUT.sideW + FC_PAD*2)}mm}
      .linkmode{--link-qr:${LINK_QR}mm}

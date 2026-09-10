@@ -58,12 +58,21 @@ let items = [], scale = 1;
 
 $('dt').value = localIsoDate();
 
+/* 자재 라벨은 두 종류가 같은 폼을 쓴다 — 이미지 종류는 개략도 칸이 하나 더 붙을 뿐,
+   품목 정보와 CSV 열 규격이 같다. 폼을 복제하면 칸을 고칠 때 한쪽만 고쳐진다. */
+const isMatMode = m => m === 'mat' || m === 'matimg';
 function switchMode(){
   const m = $('mode').value;
-  $('matForm').style.display  = m==='mat'  ? '' : 'none';
+  $('matForm').style.display  = isMatMode(m) ? '' : 'none';
   $('boltForm').style.display = m==='bolt' ? '' : 'none';
   $('locForm').style.display  = m==='loc'  ? '' : 'none';
   $('linkForm').style.display = m==='link' ? '' : 'none';
+  /* 개략도 입력은 이미지 종류에서만 — 기존 자재 라벨에 이미지가 섞여 들어가지 않는다.
+     종류를 벗어나면 첨부해 둔 개략도를 비운다. 남겨두면 다시 돌아왔을 때 이전 부품의 그림이
+     그대로 붙은 채 발행된다(칸이 숨겨져 있어 눈치채기 어렵다). */
+  $('matImgWrap').style.display   = m==='matimg' ? '' : 'none';
+  $('imgFolderWrap').style.display = m==='matimg' ? '' : 'none';
+  if(m !== 'matimg' && typeof clearMatImage === 'function') clearMatImage();
   /* 링크 라벨은 CSV 열 규격이 없다 — 폼 안의 [일괄 생성]을 쓴다.
      칸을 남겨두면 자재 라벨 표를 붙여넣어 엉뚱한 라벨이 박스 ID 까지 물고 발행된다. */
   $('csvWrap').style.display = m==='link' ? 'none' : '';
@@ -79,7 +88,10 @@ function switchMode(){
       + '<b>강도</b> 열은 없어도 됩니다 — 비우면 위 [강도 구분]에서 고른 값이 전 행에 적용됩니다.'
     : '순서: <code>품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수</code><br>'
       + '<b>규격</b> 열은 자리만 지켜주면 됩니다(라벨에 인쇄하지 않음).<br>'
-      + 'LOT-IMS <b>재고현황 CSV</b>는 헤더째 그대로 붙여넣으면 자동으로 매핑됩니다.';
+      + 'LOT-IMS <b>재고현황 CSV</b>와 <b>부품 관리대장</b>(품번 … 제품개략도 파일명)은 '
+      + '헤더째 그대로 붙여넣으면 자동으로 매핑됩니다.'
+      + (m==='matimg' ? '<br>관리대장을 쓰면 <b>제품개략도 파일명</b> 열로도 이미지가 매칭되므로 '
+        + '스크린샷 파일 이름을 바꾸지 않아도 됩니다.' : '');
   qrDiag();
 }
 

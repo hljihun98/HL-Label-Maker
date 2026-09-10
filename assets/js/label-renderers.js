@@ -8,7 +8,10 @@ const FC_PAD = 1.4;                                    // .fc 좌우 패딩(mm)
    두 라벨을 같은 박스 랙에 섞어 붙이므로 스캔 위치가 같아야 하고,
    QR 칸은 정사각형이어야 하므로 폭도 같은 값을 쓴다(남는 폭은 1D 바코드가 가져간다). */
 const FOOT_H = 10.2;
-const MAT_LAYOUT = Object.freeze({ headerH:9, footerH:FOOT_H, qrW:FOOT_H, revW:10 });
+/* 개략도 칸은 헤더의 LOC 박스 바로 아래에 왼쪽 끝을 맞춰 정렬된다 — 시안의 핵심이 이 정렬이라
+   두 숫자를 따로 두면 한쪽만 고쳐져 어긋난다. 그래서 한 상수를 공유한다. */
+const MAT_IMG_W = 34;
+const MAT_LAYOUT = Object.freeze({ headerH:9, footerH:FOOT_H, qrW:FOOT_H, revW:10, imgW:MAT_IMG_W });
 /* 링크 라벨 QR — 로케이션(34mm)보다 키운다. 주소는 코드보다 데이터가 길어 모듈 수가 늘고,
    같은 칸에 넣으면 셀 한 변이 인식 한계(0.37mm) 아래로 떨어진다. */
 const LINK_QR = 40;
@@ -104,6 +107,12 @@ const SANS_FF = '"Malgun Gothic","맑은 고딕",Arial,sans-serif';
 
 /* 라벨 안쪽 폭(mm) — 괘선·패딩을 빼기 전의 기준값 */
 const innerWmm = () => Math.max(40, num('lw') - num('pl') - num('pr'));
+/* LOC 박스와 개략도 칸이 공유하는 폭. 라벨 실측 가로를 크게 줄이면 품번 칸이 남지 않으므로
+   안쪽 폭의 40% 를 넘지 않게 한다. */
+const matBoxW = () => Math.min(MAT_LAYOUT.imgW, Math.max(12, innerWmm() * 0.4));
+/* 개략도 칸은 본문(.lb-body) 괘선 안쪽에서 시작한다 — 그 두께만큼 좁혀야 위 LOC 박스와
+   왼쪽 끝이 맞는다. 안 빼면 괘선 두께(기본 0.35mm, 최대 0.8mm)만큼 칸이 왼쪽으로 밀린다. */
+const matImgW = () => Math.max(8, matBoxW() - num('bw'));
 
 /* QR이 실제로 인쇄되는 한 변(mm) — CSS 는 칸 안에 여백을 두지 않으므로 괘선만 뺀다 */
 function qrPrintSide(type){
@@ -166,9 +175,18 @@ function barcodeHtml(it, plainFs){
 /* ---------- 라벨 HTML ---------- */
 function matLabel(it){
   const logo = $('logoOn').checked ? `<div class="lb-logo">${LOGO_USE}</div>` : '';
+  /* 이미지 종류는 품번·품명 칸이 개략도 칸만큼 좁아진다. 개략도를 못 찾아도 칸은 그대로 두고
+     "이미지 미첨부"를 찍는다 — 라벨마다 폭이 달라지면 대량 배치가 들쭉날쭉해진다. */
+  const hasImg = it.form === 'img';
+  const imgSrc = hasImg ? imageFor(it) : '';
+  /* 로케이션이 비면 기본은 수기칸이다. 이미지 종류에서만 [디테일 설정]으로 칸을 아예 뺄 수 있다 —
+     기존 자재 라벨은 이미 붙어 있는 인쇄물이라 모양을 바꾸지 않는다. */
+  const locBlank = !hasImg || $('locBlank').checked;
   const loc = it.loc
     ? `<div class="loc"><span class="cap">LOC 로케이션</span><span class="v">${esc(it.loc)}</span></div>`
-    : `<div class="loc blank"><span class="cap">LOC 로케이션</span><span class="v">&nbsp;</span></div>`;
+    : locBlank
+      ? `<div class="loc blank"><span class="cap">LOC 로케이션</span><span class="v">&nbsp;</span></div>`
+      : '';
   const bc = barcodeHtml(it, 3.4);      /* 푸터 높이가 볼트 라벨과 같으므로 문자 크기도 같게 */
   const M  = num('fs') || 1, bw = num('bw');
   /* 시안 순서: 품번/REV → 품명 → 기종/협력사/입고일/BOX ID → QR/1D 바코드 */
@@ -177,11 +195,12 @@ function matLabel(it){
   const metaH  = Math.min(9, Math.max(7.5, bodyH * 0.27));
   const nmH    = Math.max(5, bodyH - pnH - metaH);
   const innerW = innerWmm();
+  const textW = hasImg ? Math.max(24, innerW - matBoxW()) : innerW;
   /* 칸마다 괘선(bw)과 좌우 패딩(FC_PAD)을 뺀 실제 글자 폭 */
-  const pnAvail   = Math.max(20, innerW - bw*3 - MAT_LAYOUT.revW - FC_PAD*2);
+  const pnAvail   = Math.max(20, textW - bw*3 - MAT_LAYOUT.revW - FC_PAD*2);
   const revAvail  = Math.max(4, MAT_LAYOUT.revW - FC_PAD*2);
-  const nmAvail   = Math.max(20, innerW - bw*2 - FC_PAD*2);
-  const metaAvail = Math.max(8, (innerW - bw*5)/4 - FC_PAD*2);
+  const nmAvail   = Math.max(20, textW - bw*2 - FC_PAD*2);
+  const metaAvail = Math.max(8, (innerW - bw*5)/4 - FC_PAD*2);   // 메타 행은 라벨 전체 폭을 쓴다
   const pnFs   = fsv(Math.min(fitMm(it.pn, pnAvail/M, 6.4, 2.6, 800, MONO_FF), lineCap(pnH, 1)));
   const revFs  = fsv(Math.min(fitMm(it.rev || '-', revAvail/M, 4.5, 2.2, 800, MONO_FF), lineCap(pnH, 1)));
   const nm     = fitWrap(it.nm, nmAvail/M, Math.min(4.2, lineCap(nmH,1)), Math.min(3.2, lineCap(nmH,2)), 1.7, 700, SANS_FF);
@@ -193,19 +212,31 @@ function matLabel(it){
     ['BOX ID <i>박스번호</i>', it.box || '-', MONO_FF]
   ].map(([cap,val,ff])=>({cap, val, ff, fs:fsv(Math.min(fitMm(val, metaAvail/M, 2.5, 1.45, 700, ff), lineCap(metaH,1)))}));
 
+  const pnRow = `<div class="fr r-pn" style="height:${mmv(pnH)}mm">
+          <div class="fc w-pn"><span class="cap">품번 <i>PART NO.</i></span>
+            <span class="v-xl mono nowrap" style="font-size:calc(${pnFs}mm * var(--fs,1))">${esc(it.pn)}</span></div>
+          <div class="fc w-rev"><span class="cap">REV</span><span class="v-lg mono nowrap" style="font-size:calc(${revFs}mm * var(--fs,1))">${esc(it.rev||'-')}</span></div>
+        </div>`;
+  const nmRow = `<div class="fr r-nm" style="height:${mmv(nmH)}mm">
+          <div class="fc"><span class="cap">품명 <i>DESCRIPTION</i></span>
+            <span class="v-ml" style="font-size:calc(${nm.fs}mm * var(--fs,1));font-weight:700">${mlHtml(nm)}</span></div>
+        </div>`;
+  /* 이미지 칸은 품번 행과 품명 행 두 줄 높이를 함께 쓴다 — 칸 안에 가로 괘선이 지나가면
+     개략도가 두 조각으로 잘려 보인다. 그래서 두 행을 .fc-stack 으로 묶고 그 오른쪽에 둔다. */
+  const topBlock = hasImg
+    ? `<div class="fr r-top" style="height:${mmv(pnH + nmH)}mm">
+          <div class="fc-stack">${pnRow}${nmRow}</div>
+          <div class="fc w-img">${imgSrc
+            ? `<img class="mat-img" src="${imgSrc}" alt="">`
+            : '<span class="img-none">이미지<br>미첨부</span>'}</div>
+        </div>`
+    : pnRow + nmRow;
+
   return `<div class="label matmode">${frameHtml()}
     <div class="lb-head" style="height:${MAT_LAYOUT.headerH}mm">${logo}<span class="gap"></span>${loc}</div>
     <div class="lb-body">
       <div class="fields">
-        <div class="fr r-pn" style="height:${mmv(pnH)}mm">
-          <div class="fc w-pn"><span class="cap">품번 <i>PART NO.</i></span>
-            <span class="v-xl mono nowrap" style="font-size:calc(${pnFs}mm * var(--fs,1))">${esc(it.pn)}</span></div>
-          <div class="fc w-rev"><span class="cap">REV</span><span class="v-lg mono nowrap" style="font-size:calc(${revFs}mm * var(--fs,1))">${esc(it.rev||'-')}</span></div>
-        </div>
-        <div class="fr r-nm" style="height:${mmv(nmH)}mm">
-          <div class="fc"><span class="cap">품명 <i>DESCRIPTION</i></span>
-            <span class="v-ml" style="font-size:calc(${nm.fs}mm * var(--fs,1));font-weight:700">${mlHtml(nm)}</span></div>
-        </div>
+        ${topBlock}
         <div class="fr r-mat-meta" style="height:${mmv(metaH)}mm">
           ${meta.map(({cap,val,ff,fs})=>`<div class="fc w-mat-meta"><span class="cap">${cap}</span>`
             + `<span class="v-sm nowrap" style="font-family:${ff};font-size:calc(${fs}mm * var(--fs,1))">${esc(val)}</span></div>`).join('')}

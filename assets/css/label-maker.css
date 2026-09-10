@@ -59,6 +59,14 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 .sw-t{display:flex;flex-direction:column;line-height:1.35}
 .sw-t b{font-size:12.5px}
 .sw-t span{font-size:10.5px;color:var(--muted)}
+/* 사이드바 — 첨부한 개략도 확인용 썸네일 */
+.img-preview:empty{display:none}
+.img-preview{display:flex;align-items:center;gap:8px;margin-top:6px;padding:5px 6px;
+  border:1px solid var(--line);border-radius:4px;background:#fff}
+.img-preview img{width:44px;height:32px;object-fit:contain;background:#f4f6f8;flex:0 0 auto}
+.img-preview span{flex:1;min-width:0;font-size:10.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.img-preview button{flex:0 0 auto;padding:2px 7px;font-size:11px}
 .adv-box{display:none}
 .adv-box.on{display:block}
 .adv-box fieldset{background:#fbfcfd}
@@ -81,7 +89,9 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 .lb-logo{height:5.6mm;display:flex;align-items:flex-end}
 .lb-logo img{height:5.6mm;width:42.4mm;display:block;color:#000}
 .lb-head .gap{flex:1}
-.loc{width:34mm;height:9mm;background:#000;color:#fff;display:flex;flex-direction:column;justify-content:center;
+/* LOC 박스와 아래 개략도 칸은 왼쪽 끝을 맞춘다 — 폭은 label-renderers.js 의
+   matBoxW()/matImgW() 가 계산해 --loc-w · --img-w 로 넘겨준다(숫자는 MAT_IMG_W 한 곳). */
+.loc{width:var(--loc-w,34mm);height:9mm;background:#000;color:#fff;display:flex;flex-direction:column;justify-content:center;
      padding:0 1.6mm;overflow:hidden}
 .loc .cap{color:#fff;opacity:1;margin-bottom:.2mm}
 .loc .v{font-size:calc(5.2mm * var(--fs,1));font-weight:800;line-height:1;letter-spacing:.02em;white-space:nowrap}
@@ -135,6 +145,18 @@ textarea{min-height:70px;font-family:ui-monospace,Consolas,monospace;font-size:1
 
 /* 자재류 라벨 — 본문은 시안형 정보 배치, QR과 1D 바코드는 하단에 나란히 둔다. */
 .matmode .lb-logo img{height:5.6mm;width:auto}
+/* 자재 라벨 (이미지) — 품번·품명 두 행을 왼쪽으로 묶고 오른쪽에 개략도 칸을 세로로 둔다.
+   .fc-stack 은 .fc 가 아니라 래퍼이므로 칸 사이 괘선을 직접 그린다(.fc 와 같은 두께). */
+.r-top{flex:0 0 auto}
+.fc-stack{flex:1;min-width:0;display:flex;flex-direction:column;
+  border-right:var(--bw,.35mm) solid #000}
+/* 마지막 행은 남는 높이를 정확히 채운다 — 인라인 height 로 두면 래퍼의 괘선 두께만큼
+   넘쳐 메타 행이 아래로 밀린다. */
+.fc-stack .fr:last-child{border-bottom:0;flex:1 1 0;min-height:0}
+.w-img{width:var(--img-w,34mm);flex:0 0 var(--img-w,34mm);align-items:center;padding:.5mm}
+.mat-img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+/* 개략도를 못 찾은 라벨도 칸을 유지한다 — 라벨마다 폭이 달라지면 대량 배치가 들쭉날쭉해진다 */
+.img-none{font-size:calc(2.4mm * var(--fs,1));font-weight:700;text-align:center;line-height:1.25}
 
 /* 볼트류 라벨 */
 .label.boltmode .lb-head{align-items:center}

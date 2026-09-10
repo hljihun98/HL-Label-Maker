@@ -22,6 +22,7 @@
     <legend>라벨 종류</legend>
     <select id="mode" onchange="switchMode()">
       <option value="mat">자재 라벨 (파트박스용)</option>
+      <option value="matimg">자재 라벨 (이미지) – 파트박스용</option>
       <option value="bolt">볼트류 라벨 (파스너 박스용)</option>
       <option value="loc">로케이션 라벨 (랙 칸 표시용)</option>
       <option value="link">링크 라벨 (QR 바로가기용)</option>
@@ -47,7 +48,12 @@
     </div>
     <div class="row r2">
       <div><label>입고일</label><input id="dt" type="date" onchange="syncSeq()"></div>
-      <div><label>로케이션 (비우면 수기칸)</label><input id="loc" value="A-03-2"></div>
+      <div><label>로케이션 <span class="tag">(비우면 수기칸 · 이미지 종류는 ④ 설정에 따름)</span></label><input id="loc" value="A-03-2"></div>
+    </div>
+    <div id="matImgWrap" style="display:none">
+      <label>제품 개략도 <span class="tag">(이 폼으로 만드는 라벨에만 · 폴더 매칭보다 우선)</span></label>
+      <input type="file" id="matImg" accept="image/*" onchange="onMatImagePicked(event)">
+      <div id="matImgPreview" class="img-preview"></div>
     </div>
     <label>발행 라벨 수 (박스 개수)</label><input id="bn" type="number" min="1" max="400" step="1" value="1">
     <p class="hint">규격과 수량은 라벨에 인쇄하지 않습니다 — 규격은 자재관리 시스템에서 확인하고,
@@ -175,6 +181,11 @@
     <div class="chk" id="mergeWrap" style="display:none"><input type="checkbox" id="bMerge" checked>
       <label for="bMerge" style="margin:0">동일 규격 합치기 (적용 위치를 한 라벨에 모으고 1대당 개수 합산)</label></div>
     <div class="btns"><button onclick="importCsv()">CSV 추가</button></div>
+    <div id="imgFolderWrap" style="display:none">
+      <label>이미지 폴더 <span class="tag">(개략도 스크린샷 폴더를 그대로 선택)</span></label>
+      <input type="file" id="imgFolder" accept="image/*" webkitdirectory multiple onchange="onImageFolderPicked(event)">
+      <div id="imgFolderInfo" class="hint"></div>
+    </div>
     <p class="hint" id="csvHint">순서: <code>품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수</code><br>
       <b>규격</b> 열은 자리만 지켜주면 됩니다(라벨에 인쇄하지 않음).<br>
       LOT-IMS <b>재고현황 CSV</b>는 헤더째 그대로 붙여넣으면 자동으로 매핑됩니다.</p>
@@ -267,6 +278,9 @@
     <fieldset>
       <legend>④ 표시 · 글자 · 괘선</legend>
       <div class="chk"><input type="checkbox" id="logoOn" checked onchange="renderAll()"><label for="logoOn" style="margin:0">회사 로고 인쇄</label></div>
+      <div class="chk"><input type="checkbox" id="locBlank" onchange="renderAll()"><label for="locBlank" style="margin:0">로케이션 미기재 시 수기칸 인쇄 <span class="tag">(자재 라벨(이미지) 전용)</span></label></div>
+      <p class="hint" style="margin:6px 0 0">끄면 로케이션이 빈 <b>자재 라벨(이미지)</b>에서 LOC 칸을 아예 인쇄하지 않습니다.
+        나중에 손으로 적어 넣는 운용이면 켜세요. 기존 <b>자재 라벨</b>은 이 설정과 무관하게 항상 수기칸을 남깁니다.</p>
       <div class="row r2" style="margin-top:8px">
         <div><label>글자 크기 배율</label><input id="fs" type="number" step="0.05" min="0.7" max="1.3" value="1"></div>
         <div><label>괘선 두께(mm)</label><input id="bw" type="number" step="0.05" min="0.1" max="0.8" value="0.35"></div>
