@@ -231,6 +231,9 @@
       </div>
       <div id="clearInfo" class="hint" style="margin:2px 0 6px"></div>
       <div class="chk"><input type="checkbox" id="marks" onchange="renderAll()"><label for="marks" style="margin:0">라벨 외곽선 인쇄 (정합 확인용)</label></div>
+      <p class="hint"><b>장수가 늘수록 조금씩 밀릴 때</b>는 여백이 아니라 <b>라벨 실측 세로</b>가 원인입니다 —
+        한 장의 오차가 장마다 쌓입니다. 10장을 연속 인쇄해 <b>첫 장 위 끝에서 열한째 장 위 끝까지</b>를 재고
+        10으로 나눈 값을 세로에 넣으세요(예: 602mm ÷ 10 = 60.2).</p>
       <p class="hint"><b>아래가 잘릴 때</b> → <b>레이저 프린터</b> 프리셋(사방 4mm)을 먼저 누르세요. 그래도 잘리면 <b>아래 여백</b>만 5, 6으로 올립니다.
       <b>위 여백을 줄여도 아래 잘림은 그대로입니다</b> — 라벨 높이가 고정이라 푸터 끝 위치는 <b>아래 여백</b>이 정하고, 위 여백을 줄이면 가운데 QR·본문만 커집니다.<br>
       브라우저 인쇄 대화상자에서 <b>배율 100%</b>·<b>여백 없음</b>·<b>머리글/바닥글 해제</b>도 항상 확인하세요.
@@ -302,6 +305,20 @@
       <p class="hint">박스 ID = 접두 + YYMMDD + 일련번호. 라벨 1장 = 실물 박스 1개.<br>
         순번은 <b>입고일별로 이 브라우저에 저장</b>되므로 창을 닫고 다시 열어도 이어집니다.
         라벨 훼손으로 재인쇄할 때만 시작 번호를 원래 값으로 되돌리세요 — <b>박스 ID는 반드시 원래 번호를 유지</b>합니다.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑥ 인쇄 나눠 보내기 (급지 밀림 대응)</legend>
+      <div class="row r2">
+        <div><label>한 번에 보낼 장수</label><input id="batch" type="number" min="0" max="400" step="1" value="0"></div>
+        <div><label>묶음 사이 대기(초)</label><input id="batchWait" type="number" min="0" max="60" step="1" value="3"></div>
+      </div>
+      <p class="hint">0이면 지금처럼 한 번에 다 보냅니다. 프린터가 급지를 못 따라와 라벨이 밀리거나
+        칸을 벗어날 때 <b>20~50장씩</b> 끊어 보내면 묶음마다 프린터가 용지 위치를 다시 잡습니다.
+        묶음이 끝날 때마다 인쇄 대화상자가 다시 뜹니다.<br>
+        <b>프린터의 인쇄 속도·농도 자체는 웹페이지가 바꿀 수 없습니다</b> — 윈도우
+        [설정 → Bluetooth 및 장치 → 프린터 및 스캐너 → 해당 프린터 → 인쇄 기본 설정]에서
+        <b>속도(Speed)를 낮추고 농도(Darkness)를 올리는</b> 것이 급지 오류의 정석 대응입니다.</p>
     </fieldset>
 
     <p class="hint" style="padding:0 2px">정합값이 확정되면 <code>assets/js/core.js</code> 의

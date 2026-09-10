@@ -531,22 +531,66 @@ function importCsv(){
    그리는 즉시 인쇄하면 아직 안 올라온 칸이 빈 채로 찍힌다. 그래서 인쇄 전에 기다린다.
    한 장이라도 영영 안 올라오면 인쇄 자체가 막히므로 상한을 둔다. */
 function whenImagesReady(root, timeoutMs = 15000){
+  /* 글꼴도 함께 기다린다 — 아직 안 올라온 글꼴로 인쇄되면 칸에 맞춰 계산한 글자 크기가
+     실제 인쇄와 어긋난다(품번이 칸을 넘거나 남는다). */
+  const fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready.catch(() => {}) : Promise.resolve();
   const pending = [...root.querySelectorAll('img')].filter(img => !img.complete);
-  if(!pending.length) return Promise.resolve();
   const settle = img => new Promise(resolve => {
     img.addEventListener('load', resolve, { once:true });
     img.addEventListener('error', resolve, { once:true });
   });
   return Promise.race([
-    Promise.all(pending.map(settle)),
+    Promise.all([fonts, ...pending.map(settle)]),
     new Promise(resolve => setTimeout(resolve, timeoutMs))
   ]);
 }
+/* 인쇄가 끝날 때까지 기다린다. window.print() 가 돌아온 시점은 인쇄가 끝난 시점이 아니라서,
+   곧바로 화면을 미리보기(50장)로 되돌리면 브라우저가 인쇄 작업을 다 만들기 전에 라벨이 사라진다.
+   afterprint 를 기다리되, 대화상자를 열어둔 채 두는 경우가 있으므로 상한을 둔다. */
+function printAndWait(){
+  return new Promise(resolve => {
+    let settled = false, timer = 0;
+    const finish = () => {
+      if(settled) return;
+      settled = true;
+      clearTimeout(timer);                // 남겨두면 인쇄가 끝난 뒤에도 타이머가 계속 살아 있다
+      window.removeEventListener('afterprint', finish);
+      resolve();
+    };
+    window.addEventListener('afterprint', finish);
+    timer = setTimeout(finish, 5 * 60 * 1000);   // 대화상자를 열어둔 채 둬도 영영 매달리지 않게
+    try{ window.print(); }
+    catch(error){ finish(); }
+  });
+}
+const wait = seconds => new Promise(resolve => setTimeout(resolve, Math.max(0, seconds) * 1000));
+
+/* 프린터가 급지를 못 따라오면 라벨이 밀린다. 프린터의 인쇄 속도 자체는 드라이버 설정이라
+   웹페이지가 바꿀 수 없지만, 한 번에 보내는 양은 나눌 수 있다 — 묶음 사이에 프린터가
+   용지 위치를 다시 잡는다. 0이면 지금까지처럼 한 번에 보낸다. */
 async function doPrint(){
   if(!items.length){ alert('인쇄할 라벨이 없습니다. 정보를 입력하고 [목록에 추가]를 누르세요.'); return; }
-  renderAll(true);                        // 인쇄 직전에만 전체 장수를 그린다
-  await whenImagesReady($('prev'));
-  try{ window.print(); } finally { renderAll(); }
+  const size = Math.max(0, Math.min(MAX_LABELS, parseInt($('batch').value) || 0));
+  const gap = Math.max(0, Number.parseFloat($('batchWait').value) || 0);
+  const all = items;
+  const batches = [];
+  for(let i = 0; i < all.length; i += (size || all.length)) batches.push(all.slice(i, i + (size || all.length)));
+  try{
+    for(let i = 0; i < batches.length; i++){
+      /* 묶음만 그려서 보낸다 — items 를 잠시 바꿔 renderAll 을 그대로 쓴다(복구는 finally) */
+      items = batches[i];
+      renderAll(true);                    // 인쇄할 때만 전체 장수를 그린다
+      await whenImagesReady($('prev'));
+      await printAndWait();
+      if(i + 1 < batches.length){
+        $('cnt').textContent = `${i + 1}/${batches.length}묶음 인쇄함 · 다음 묶음 준비 중…`;
+        await wait(gap);
+      }
+    }
+  } finally {
+    items = all;
+    renderAll();
+  }
 }
 function clearAll(){ items=[]; renderAll(); }
 function del(i){ items.splice(i,1); renderAll(); }
