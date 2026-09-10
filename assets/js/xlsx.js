@@ -55,11 +55,15 @@ async function zipRead(bytes, entry){
 }
 
 /* ── XML ── 엑셀이 기계로 써 내는 XML 이라 필요한 태그만 훑는다 */
-const XML_NAMED = { amp:'&', lt:'<', gt:'>', quot:'"', apos:"'" };
+/* prototype 없는 표를 쓴다 — 셀에 "&constructor;" 같은 글자가 들어오면 일반 객체에서는
+   Object.prototype 의 값이 튀어나와 라벨에 함수 소스가 찍힌다. */
+const XML_NAMED = Object.assign(Object.create(null), { amp:'&', lt:'<', gt:'>', quot:'"', apos:"'" });
 const xmlText = value => String(value).replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, code) => {
   if(code[0] !== '#') return XML_NAMED[code.toLowerCase()] ?? whole;
   const number = code[1] === 'x' || code[1] === 'X' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
-  return Number.isFinite(number) ? String.fromCodePoint(number) : whole;
+  /* 범위를 넘는 코드(&#x110000;)는 String.fromCodePoint 가 던진다 — 원문을 그대로 둔다 */
+  if(!Number.isFinite(number) || number < 0 || number > 0x10FFFF) return whole;
+  return String.fromCodePoint(number);
 });
 const xmlAttr = (tag, name) => {
   const found = new RegExp(`\\s${name.replace(':', '\\:')}="([^"]*)"`).exec(tag);
@@ -75,7 +79,8 @@ const RE_PHON  = new RegExp(`<${NS}rPh[\\s\\S]*?</${NS}rPh>`, 'g');
 const RE_ROW   = new RegExp(`<${NS}row\\b[^>]*>([\\s\\S]*?)</${NS}row>`, 'g');
 const RE_CELL  = new RegExp(`<${NS}c\\b([^>]*?)(?:/>|>([\\s\\S]*?)</${NS}c>)`, 'g');
 const RE_VALUE = new RegExp(`<${NS}v>([\\s\\S]*?)</${NS}v>`);
-const RE_SHEET = new RegExp(`<${NS}sheet\\b[^>]*>`);
+const RE_SHEETS = new RegExp(`<${NS}sheet\\b[^>]*>`, 'g');
+const RE_SHARED_CELL = new RegExp(`<${NS}c\\b[^>]*t="s"`);
 const xmlTexts = fragment => [...fragment.matchAll(RE_TEXT)].map(match => xmlText(match[1])).join('');
 /* "AB12" → 27 (0부터). 빈 칸은 <c> 자체가 없으므로 이 번호로 자리를 맞춘다 */
 function colIndex(ref){
@@ -117,8 +122,11 @@ function sheetRows(xml, strings){
 /* 첫 번째 시트 — 워크북에 적힌 순서가 곧 엑셀 탭 순서다. 파일 이름(sheet1.xml)은 순서와
    무관할 수 있으므로 관계 파일(rels)을 따라간다. */
 function firstSheetPath(entries, workbookXml, relsXml){
-  const sheet = RE_SHEET.exec(workbookXml || '');
-  const id = sheet ? xmlAttr(sheet[0], 'r:id') : '';
+  /* 엑셀 탭 순서대로 보되 숨긴 시트는 건너뛴다 — 첫 탭이 숨겨진 설정·집계 시트인 파일이 있고,
+     그걸 읽으면 "첫 번째 시트"라고 안내하면서 엉뚱한 표를 가져온다. */
+  const sheets = [...String(workbookXml || '').matchAll(RE_SHEETS)].map(match => match[0]);
+  const sheet = sheets.find(tag => !/state="(?:very)?hidden"/i.test(tag)) || sheets[0] || '';
+  const id = sheet ? xmlAttr(sheet, 'r:id') : '';
   if(id && relsXml){
     /* id 는 파일에서 온 값이라 정규식 기호가 섞여 있으면 패턴이 깨진다 */
     const safeId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -130,28 +138,63 @@ function firstSheetPath(entries, workbookXml, relsXml){
       if(entries.has(path)) return path;
     }
   }
-  return [...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort()[0] || '';
+  /* 폴백은 숫자로 정렬한다 — 글자순이면 sheet10 이 sheet2 보다 앞에 온다 */
+  return [...entries.keys()].filter(name => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
+    .sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0))[0] || '';
+}
+
+/* ZIP 안의 파일 이름은 대소문자를 가린다 — 도구마다 표기가 달라(SharedStrings.xml) 이름을
+   고정해 찾으면 글자 셀이 전부 빈칸이 된다. 그래서 규칙으로 찾는다. */
+const findEntry = (entries, pattern) => {
+  const name = [...entries.keys()].find(key => pattern.test(key));
+  return name ? entries.get(name) : undefined;
+};
+/* 붙여넣기 칸에 넣을 수 있는 양의 상한. 라벨은 400장이 상한이라 그보다 훨씬 크게 잡아도
+   되지만, 수만 행을 한 문자열로 이어 붙이면 그 자체로 화면이 멈춘다. */
+const SHEET_MAX_ROWS = 5000;
+let readSheetNote = '';               // 잘라낸 경우처럼 사용자에게 알릴 말 (읽을 때마다 갱신)
+
+/* 한국 윈도우 엑셀의 "CSV(쉼표로 분리)"는 UTF-8 이 아니라 CP949 로 저장한다 —
+   UTF-8 로 읽으면 한글이 깨진 채로 라벨까지 흘러간다(품번은 ASCII 라 매칭은 되므로
+   인쇄한 뒤에야 발견된다). 깨진 글자가 보이면 CP949 로 다시 읽는다. */
+async function readTextFile(file){
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const utf8 = new TextDecoder('utf-8').decode(bytes);
+  if(!utf8.includes('�')) return utf8;
+  try{
+    const cp949 = new TextDecoder('euc-kr').decode(bytes);
+    return cp949.includes('�') ? utf8 : cp949;
+  }catch(error){ return utf8; }
 }
 
 /* 파일 하나 → 붙여넣기 칸에 그대로 넣을 수 있는 글자표.
    엑셀은 탭으로, CSV·텍스트는 원문 그대로 돌려준다(붙여넣기와 같은 경로로 흘려보내기 위함). */
 async function readSheetFile(file){
-  if(/\.(csv|tsv|txt)$/i.test(file.name)) return String(await file.text());
+  readSheetNote = '';
+  if(/\.(csv|tsv|txt)$/i.test(file.name)) return readTextFile(file);
   const bytes = new Uint8Array(await file.arrayBuffer());
   const entries = zipEntries(bytes);
   const [workbook, rels] = await Promise.all([
-    zipRead(bytes, entries.get('xl/workbook.xml')),
-    zipRead(bytes, entries.get('xl/_rels/workbook.xml.rels'))
+    zipRead(bytes, findEntry(entries, /^xl\/workbook\.xml$/i)),
+    zipRead(bytes, findEntry(entries, /^xl\/_rels\/workbook\.xml\.rels$/i))
   ]);
   const path = firstSheetPath(entries, workbook, rels);
   if(!path) throw new Error('엑셀에서 시트를 찾지 못했습니다.');
   const [sheet, shared] = await Promise.all([
     zipRead(bytes, entries.get(path)),
-    zipRead(bytes, entries.get('xl/sharedStrings.xml'))
+    zipRead(bytes, findEntry(entries, /^xl\/sharedstrings\.xml$/i))
   ]);
-  const rows = sheetRows(sheet, sharedStrings(shared));
+  const strings = sharedStrings(shared);
+  /* 글자를 공유 문자열로 담아 둔 시트인데 그 표를 못 읽었으면, 품번·품명이 전부 빈칸인
+     표가 조용히 만들어진다 — 그냥 넘기지 않고 다시 저장하도록 알린다. */
+  if(!strings.length && RE_SHARED_CELL.test(sheet))
+    throw new Error('엑셀의 공유 문자열 표를 읽지 못했습니다 — 엑셀에서 [다른 이름으로 저장]으로 .xlsx 로 다시 저장해 주세요.');
+  const rows = sheetRows(sheet, strings);
+  if(rows.length > SHEET_MAX_ROWS)
+    readSheetNote = `${rows.length}행 중 앞 ${SHEET_MAX_ROWS}행만 읽었습니다`;
   /* 값 안의 탭·줄바꿈은 공백으로 바꾼다 — 그대로 두면 열이 밀린다(붙여넣기도 같은 규칙이다) */
-  return rows.map(cells => cells.map(value => String(value).replace(/[\t\r\n]+/g, ' ')).join('\t'))
+  return rows.slice(0, SHEET_MAX_ROWS)
+    .map(cells => cells.map(value => String(value).replace(/[\t\r\n]+/g, ' ')).join('\t'))
     .filter(line => line.trim())
     .join('\n');
 }

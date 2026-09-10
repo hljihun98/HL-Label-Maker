@@ -1,6 +1,14 @@
 const MAX_LABELS = 400;      // 브라우저가 감당하는 현실적 상한 (QR·바코드가 라벨마다 들어감)
 const PREVIEW_MAX = 100;     // 미리보기는 앞부분만 — 수백 장을 화면에 그리면 느려진다
 
+/* 인쇄 중에는 목록을 건드릴 수 없다. 나눠 보내기는 화면에 묶음만 올려두고 끝나면 원래 목록으로
+   되돌리므로, 이때 담은 라벨은 되돌리는 순간 사라진다 — 그런데 박스 ID 는 이미 올라가 있다.
+   라벨 없이 번호만 소모되면 그 번호의 박스를 영원히 찾을 수 없다(박스 ID = 재고의 고유키). */
+function busyPrinting(){
+  if(!printing) return false;
+  alert('인쇄가 끝난 뒤에 해주세요.\n인쇄 중에 담으면 박스 ID만 소모되고 라벨은 사라집니다.');
+  return true;
+}
 function roomLeft(){ return MAX_LABELS - items.length; }
 function capWarn(want){
   const room = roomLeft();
@@ -126,15 +134,21 @@ function imageBlob(file){
 }
 /* 실패했을 때 무엇이 문제였는지 알 수 있게 브라우저가 본 형식·크기를 함께 남긴다 */
 const fileNote = file => `(형식 ${file.type || '없음'} · ${Math.round((file.size || 0)/1024)}KB)`;
+const IMG_DECODE_MS = 20000;
 function loadImage(blob, file){
   return new Promise((resolve, reject) => {
     /* 데이터 URL 대신 objectURL 로 디코딩한다 — 파일을 통째로 base64 로 부풀리지 않고,
        선언된 형식이 이상해도 blob 의 형식을 우리가 정해 줄 수 있다. */
     const url = URL.createObjectURL(blob);
     const image = new Image();
-    const done = fn => (...args) => { URL.revokeObjectURL(url); fn(...args); };
+    let timer = 0;
+    const done = fn => (...args) => { clearTimeout(timer); URL.revokeObjectURL(url); fn(...args); };
+    const fail = done(() => reject(new Error(`${file.name} 을(를) 이미지로 열지 못했습니다 ${fileNote(file)}.`)));
     image.onload = done(() => resolve(image));
-    image.onerror = done(() => reject(new Error(`${file.name} 을(를) 이미지로 열지 못했습니다 ${fileNote(file)}.`)));
+    image.onerror = fail;
+    /* onload·onerror 가 둘 다 안 오는 파일이 하나라도 있으면 폴더 읽기가 통째로 멈추고
+       (진행 표시가 "읽는 중…"에서 굳고) 폴더를 다시 고를 수도 없다 — 상한을 둔다. */
+    timer = setTimeout(fail, IMG_DECODE_MS);
     image.src = url;
   });
 }
@@ -192,6 +206,9 @@ async function onImageFolderPicked(event){
   if(!files.length){ info.textContent = '이미지 파일을 찾지 못했습니다.'; input.value = ''; return; }
   if(folderLoading){ info.textContent = '앞서 고른 폴더를 아직 읽는 중입니다. 끝난 뒤 다시 눌러주세요.'; return; }
   folderLoading = true;
+  /* 읽는 동안 입력칸을 잠근다 — 잠그지 않으면 두 번째 선택이 파일 목록을 바꿔버려서
+     읽고 있던 첫 폴더의 남은 파일들이 "읽을 수 없습니다"로 떨어진다. */
+  input.disabled = true;
   /* 폴더를 새로 고르면 이전 폴더의 매칭은 버린다 — 폴더에서 지운 파일이 남아 있으면
      라벨에 없는 개략도가 인쇄된다. 관리대장에서 읽은 파일명은 표에서 온 값이라 남긴다. */
   imageByPn.clear();
@@ -218,6 +235,7 @@ async function onImageFolderPicked(event){
     }
   } finally {
     folderLoading = false;
+    input.disabled = false;
     /* 파일을 다 읽은 뒤에 비운다 — 읽기 전에 비우면 브라우저가 방금 고른 파일 목록을 놓아버려
        한 장도 못 읽는다. 비우는 목적은 같은 폴더를 다시 골라도 change 가 뜨게 하는 것뿐이다. */
     input.value = '';
@@ -235,18 +253,25 @@ async function onImageFolderPicked(event){
 /* 엑셀 파일을 고르면 첫 번째 시트를 읽어 붙여넣기 칸을 채운다 — 곧바로 발행하지 않는 이유는
    라벨 한 장이 박스 ID 하나를 소비하기 때문이다. 무엇이 들어왔는지 보고 [CSV 추가]를 누른다. */
 async function onSheetFilePicked(event){
-  const file = event.target.files[0];
+  const input = event.target;
+  const file = input.files[0];
   const info = $('sheetFileInfo');
-  event.target.value = '';                 // 같은 파일을 고쳐 저장한 뒤 다시 골라도 반영되도록
-  if(!file) return;
+  if(!file){ input.value = ''; return; }
   info.textContent = `${file.name} 읽는 중…`;
   let text;
   try{ text = await readSheetFile(file); }
   catch(error){ info.innerHTML = `<b style="color:#b32020">${esc(error.message)}</b>`; return; }
+  finally{
+    /* 다 읽은 뒤에 비운다 — 읽기 전에 비우면 브라우저가 고른 파일을 놓아버린다
+       (폴더 읽기에서 같은 실수로 73장을 통째로 못 읽었다). 비우는 목적은 같은 파일을
+       고쳐 저장한 뒤 다시 골라도 change 가 뜨게 하는 것뿐이다. */
+    input.value = '';
+  }
   const lines = text.split(/\r?\n/).filter(line => line.trim());
   if(!lines.length){ info.innerHTML = '<b style="color:#b32020">시트에 내용이 없습니다.</b>'; return; }
   $('csv').value = text;
   info.innerHTML = `<b>${esc(file.name)}</b> · ${lines.length}줄을 읽었습니다`
+    + (readSheetNote ? ` · <b style="color:#a86a00">${esc(readSheetNote)}</b>` : '')
     + ' — 아래 내용을 확인하고 <b>[CSV 추가]</b>를 누르세요.';
 }
 
@@ -259,6 +284,7 @@ const normalizeUrl = value => {
   return /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : 'https://' + text;
 };
 function addLabels(){
+  if(busyPrinting()) return;
   if($('mode').value==='link'){
     const bulk = $('kbulk').value.trim();
     const parsed = [];
@@ -389,6 +415,7 @@ function boxCount(cells){
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, MAX_LABELS) : 1;
 }
 function importCsv(){
+  if(busyPrinting()) return;
   const lines = $('csv').value.trim().split(/\r?\n/).filter(Boolean);
   if(!lines.length){ alert('붙여넣은 내용이 없습니다.'); return; }
   let table;
@@ -573,8 +600,12 @@ async function doPrint(){
   if(!items.length){ alert('인쇄할 라벨이 없습니다. 정보를 입력하고 [목록에 추가]를 누르세요.'); return; }
   if(printing) return;                    // 두 번 눌러도 묶음이 겹쳐 나가지 않게
   printing = true;
-  const size = Math.max(0, Math.min(MAX_LABELS, parseInt($('batch').value) || 0));
-  const gap = Math.max(0, Number.parseFloat($('batchWait').value) || 0);
+  /* 입력칸의 min·max 로 잘라 쓴다 — 손으로 600 을 적으면 묶음마다 10분씩 멈춘다 */
+  const per = $('paper').value === 'a4' ? sheetGrid().per : 1;
+  let size = Math.min(MAX_LABELS, Math.round(fieldNumber('batch')));
+  /* A4 는 묶음이 시트 칸수의 배수가 아니면 묶음 끝의 시트가 반쯤 빈 채로 버려진다 */
+  if(size > 0 && per > 1) size = Math.max(per, Math.round(size / per) * per);
+  const gap = fieldNumber('batchWait');
   const all = items;
   const batches = [];
   for(let i = 0; i < all.length; i += (size || all.length)) batches.push(all.slice(i, i + (size || all.length)));
@@ -583,10 +614,18 @@ async function doPrint(){
       /* 묶음만 그려서 보낸다 — items 를 잠시 바꿔 renderAll 을 그대로 쓴다(복구는 finally) */
       items = batches[i];
       renderAll(true);                    // 인쇄할 때만 전체 장수를 그린다
+      if(batches.length > 1)              // renderAll 이 쓴 장수 표시를 진행 상황으로 덮는다
+        $('cnt').textContent = `${i + 1}/${batches.length}묶음 · ${batches[i].length}장 인쇄 중…`;
       await whenImagesReady($('prev'));
       await printAndWait();
+      /* 묶음마다 멈춰 서서 물어본다 — 인쇄 대화상자를 취소해도 afterprint 는 오므로,
+         물어보지 않으면 400장/20장 묶음에서 대화상자를 20번 닫아야 빠져나올 수 있다.
+         작업자가 라벨과 용지를 확인하고 이어가는 자리이기도 하다. */
       if(i + 1 < batches.length){
-        $('cnt').textContent = `${i + 1}/${batches.length}묶음 인쇄함 · 다음 묶음 준비 중…`;
+        const go = confirm(`${i + 1}/${batches.length}묶음을 보냈습니다.`
+          + `\n라벨과 용지를 확인한 뒤 [확인]을 누르면 다음 묶음을 인쇄합니다.`
+          + `\n[취소]를 누르면 여기서 멈춥니다.`);
+        if(!go) break;
         await wait(gap);
       }
     }
@@ -596,7 +635,7 @@ async function doPrint(){
     renderAll();
   }
 }
-function clearAll(){ items=[]; renderAll(); }
+function clearAll(){ if(busyPrinting()) return; items=[]; renderAll(); }
 function del(i){ items.splice(i,1); renderAll(); }
 function zoom(d){ scale = Math.min(2, Math.max(.5, scale + d*0.15)); renderAll(); }
 
