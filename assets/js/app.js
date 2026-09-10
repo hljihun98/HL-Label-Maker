@@ -190,6 +190,24 @@ async function onImageFolderPicked(event){
   renderAll();
 }
 
+/* 엑셀 파일을 고르면 첫 번째 시트를 읽어 붙여넣기 칸을 채운다 — 곧바로 발행하지 않는 이유는
+   라벨 한 장이 박스 ID 하나를 소비하기 때문이다. 무엇이 들어왔는지 보고 [CSV 추가]를 누른다. */
+async function onSheetFilePicked(event){
+  const file = event.target.files[0];
+  const info = $('sheetFileInfo');
+  event.target.value = '';                 // 같은 파일을 고쳐 저장한 뒤 다시 골라도 반영되도록
+  if(!file) return;
+  info.textContent = `${file.name} 읽는 중…`;
+  let text;
+  try{ text = await readSheetFile(file); }
+  catch(error){ info.innerHTML = `<b style="color:#b32020">${esc(error.message)}</b>`; return; }
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  if(!lines.length){ info.innerHTML = '<b style="color:#b32020">시트에 내용이 없습니다.</b>'; return; }
+  $('csv').value = text;
+  info.innerHTML = `<b>${esc(file.name)}</b> · ${lines.length}줄을 읽었습니다`
+    + ' — 아래 내용을 확인하고 <b>[CSV 추가]</b>를 누르세요.';
+}
+
 /* ---------- 목록 ---------- */
 /* 주소에 스킴이 없으면 붙인다 — "intra/check" 만 적힌 QR 은 휴대폰 카메라가
    링크로 인식하지 못해 라벨이 통째로 무용지물이 된다. */

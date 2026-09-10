@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="assets/css/label-maker.css">
   <script src="assets/js/vendor/qrcode.min.js" defer></script>
   <script src="assets/js/barcode.js" defer></script>
+  <script src="assets/js/xlsx.js" defer></script>
   <script src="assets/js/core.js" defer></script>
   <script src="assets/js/label-renderers.js" defer></script>
   <script src="assets/js/app.js" defer></script>
@@ -176,7 +177,11 @@
   </div>
 
   <fieldset style="margin-top:14px" id="csvWrap">
-    <legend>일괄 등록 (CSV 붙여넣기)</legend>
+    <legend>일괄 등록 (엑셀 파일 · 붙여넣기)</legend>
+    <label>엑셀 파일 불러오기 <span class="tag">(.xlsx · 첫 번째 시트)</span></label>
+    <input type="file" id="sheetFile" accept=".xlsx,.xlsm,.csv,.tsv,.txt" onchange="onSheetFilePicked(event)">
+    <div id="sheetFileInfo" class="hint"></div>
+    <label style="margin-top:10px">또는 엑셀에서 복사해 붙여넣기</label>
     <textarea id="csv" placeholder="품번,Rev,품명,규격,기종,수량,단위,로케이션,협력사,박스수"></textarea>
     <div class="chk" id="mergeWrap" style="display:none"><input type="checkbox" id="bMerge" checked>
       <label for="bMerge" style="margin:0">동일 규격 합치기 (적용 위치를 한 라벨에 모으고 1대당 개수 합산)</label></div>

@@ -17,6 +17,9 @@
 | 로케이션 라벨 | 랙 칸 앞면 | 32.9 mm QR + 코드 대형 표기 |
 | 링크 라벨 | 게시판 · 작업대 | 40 mm QR 에 주소만 담아 폰 카메라로 바로 열림 + 링크명·설명 |
 
+일괄 등록은 **부품 관리대장 `.xlsx` 파일을 직접 골라** 첫 시트를 읽거나(설치 없이 브라우저에서
+바로 해석합니다), 엑셀에서 복사해 붙여넣으면 됩니다. LOT-IMS 재고현황 CSV도 헤더째 인식합니다.
+
 용지는 **라벨 프린터 낱장 연속**과 **A4 시트(격자 자동 계산)** 두 가지를 지원하고,
 인쇄가 잘리거나 밀릴 때는 [디테일 설정]의 정합 테스트 인쇄로 실측해 보정합니다.
 
@@ -38,16 +41,24 @@
 │     │  ├─ qrcode.min.js         # QR 생성 라이브러리
 │     │  └─ LICENSE               # qrcode-generator (MIT) 고지
 │     ├─ barcode.js               # QR·Code128 SVG 생성기
+│     ├─ xlsx.js                  # .xlsx 첫 시트 읽기 (ZIP·XML 직접 해석)
 │     ├─ core.js                  # 설정, 공통 도우미, 볼트 규격표·도면
 │     ├─ label-renderers.js       # 라벨 종류별 HTML 렌더러, 레이아웃 상수
-│     └─ app.js                   # 채번, 목록, CSV, 미리보기, 인쇄 제어
+│     └─ app.js                   # 채번, 목록, CSV·이미지, 미리보기, 인쇄 제어
 └─ docs/
    └─ 운영계획.md                  # QR 재고관리 운영 계획
 ```
 
 ## 유지보수 원칙
 
-- 스크립트는 HTML에 선언된 순서대로 의존합니다: `qrcode.min.js` → `barcode.js` → `core.js` → `label-renderers.js` → `app.js`.
+- 스크립트는 HTML에 선언된 순서대로 의존합니다: `qrcode.min.js` → `barcode.js` → `xlsx.js` →
+  `core.js` → `label-renderers.js` → `app.js`.
+- **엑셀은 파일을 그대로 골라 읽습니다**(`xlsx.js`, 첫 번째 시트). `.xlsx` 는 ZIP 안의 XML 이라
+  중앙 디렉터리 → 시트 XML → 셀 값만 직접 훑고, 압축 해제는 브라우저의
+  `DecompressionStream('deflate-raw')` 을 씁니다 — 파서 라이브러리(1MB 가까이)를 들이지 않기
+  위해서입니다. 숫자 서식과 날짜 serial 은 풀지 않습니다(라벨로 가는 열이 모두 글자와 정수).
+  읽은 표는 붙여넣기 칸을 채우기만 하고 발행은 [CSV 추가]가 합니다 — 라벨 한 장이 박스 ID
+  하나를 소비하므로 무엇이 들어왔는지 보고 누르게 합니다.
 - **프린터 기본 보정값**은 `assets/js/core.js` 의 `CAL` · `CAL_PRESETS` 에서 관리합니다.
   `CAL` 은 `Object.freeze` 되어 있습니다 — 프리셋 버튼은 입력칸만 바꾸므로 [전체 초기화]는 항상 이 값으로 돌아갑니다.
 - **라벨 칸 치수**(푸터 높이, QR 칸 폭, 도면 칸 폭 등)는 `assets/js/label-renderers.js` 의
